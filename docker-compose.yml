@@ -1,0 +1,14 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: MSManager-react
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app #B: Sync local code (hot-reload)
+
+      #B: Isolate node_modules (Important due to OS difference).
+      #B: To add dependencies, use docker-compose exec frontend npm install, or rebuild for every local installation.
+      - /app/node_modules 
