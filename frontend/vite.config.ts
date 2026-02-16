@@ -10,5 +10,6 @@ export default defineConfig({
 		//B:Listen to every IP address
 		//B:Needed so the container can reach the Host OS (via the configured port)
 		host: true,
+		hmr: {port:5173}
 	}
 })
