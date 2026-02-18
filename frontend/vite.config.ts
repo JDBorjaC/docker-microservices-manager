@@ -10,6 +10,14 @@ export default defineConfig({
 		//B:Listen to every IP address
 		//B:Needed so the container can reach the Host OS (via the configured port)
 		host: true,
-		hmr: {port:5173}
-	}
+		hmr: {port:5173},
+
+		//C: Due to WSL2 limitations, polling needs to be enabled so that hmr works. (causes high CPU usage)
+		watch: {
+			usePolling: true
+		}
+	},
+
+
+	
 })
