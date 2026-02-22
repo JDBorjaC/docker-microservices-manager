@@ -1,0 +1,27 @@
+services:
+  frontend_dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: MSManager-react-dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app #B: Sync local code (hot-reload)
+
+      #B: Isolate node_modules (Important due to OS difference).
+      #B: To add dependencies, use docker-compose exec frontend npm install, or rebuild for every local installation.
+      - /app/node_modules 
+  
+  orchestrator_dev:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile.dev
+    container_name: MSManager-orchestrator-dev
+    ports:
+      - "8080:8080"
+    volumes:
+      #B: hot reload
+      - ./orchestrator:/usr/src/app
+      #B: give container access to the host's Docker daemon.
+      - /var/run/docker.sock:/var/run/docker.sock

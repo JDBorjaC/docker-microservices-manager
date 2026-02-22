@@ -30,5 +30,5 @@ func (h *Handler) PullImage(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "ok"})
+	c.JSON(http.StatusOK, gin.H{"message": "success!!!"})
 }

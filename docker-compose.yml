@@ -13,7 +13,7 @@ services:
       #B: To add dependencies, use docker-compose exec frontend npm install, or rebuild for every local installation.
       - /app/node_modules 
   
-  backend:
+  orchestrator:
     build:
       context: ./orchestrator
       dockerfile: Dockerfile
