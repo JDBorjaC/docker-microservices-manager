@@ -12,3 +12,14 @@ services:
       #B: Isolate node_modules (Important due to OS difference).
       #B: To add dependencies, use docker-compose exec frontend npm install, or rebuild for every local installation.
       - /app/node_modules 
+  
+  backend:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    container_name: MSManager-orchestrator
+    ports:
+      - "8080:8080"
+    volumes:
+      #B: give container access to the host's Docker daemon.
+      - /var/run/docker.sock:/var/run/docker.sock

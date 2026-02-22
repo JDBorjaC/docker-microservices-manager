@@ -1,0 +1,5 @@
+1. Crear microservicio (código, lenguaje de programación, nombre, descripción)
+2. Listar microservicios
+3. Habilitar microservicio
+4. Deshabilitar microservicio
+5. Eliminar microservicio
