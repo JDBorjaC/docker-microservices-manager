@@ -1,0 +1,197 @@
+:root {
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #100e11;
+}
+
+
+/*Estas clases componen el diseño de 'terminal' de la página.*/
+/* Main monitor container */
+.monitor-frame {
+  width: 90%;
+  max-width: 1200px;
+  margin: 4px auto;
+  background: linear-gradient(360deg, #27342a -5%, #212621 25%);
+  border-radius: 8px;
+  padding: 55px;
+  box-shadow:
+            inset 0 2px 5px rgba(255, 255, 255, 0.1),
+            inset 0 -2px 5px rgba(0, 0, 0, 0.5),
+            0 20px 60px rgba(0, 0, 0, 0.451);
+}
+
+/* Monitor bezel (the thick frame) */
+.monitor-bezel {
+  background: linear-gradient(180deg, #121c12 97%, #213228 101%);
+  border-radius: 0px;
+  padding: 10px;
+  box-shadow:
+            inset -0.00001px -3px 2px rgba(20, 94, 20, 0.59),
+            inset 3px 3px 3px rgba(1, 13, 0, 0.93),
+            inset -3px -0.00001px 3px rgba(1, 13, 0, 0.93);
+}
+
+/* The actual screen */
+.monitor-screen {
+  background-color: #0f150f;
+  border-radius: 8px;
+  padding: 30px;
+  box-shadow: 
+    inset 0 4px 8px rgba(0, 0, 0, 0.8),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.6);
+  border: 2px solid #091209;
+  min-height: 400px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Screen content */
+.monitor-content {
+  color: #0f0;
+  font-family: 'Courier New', 'Courier', monospace;
+  font-size: 16px;
+  line-height: 1.6;
+  text-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
+}
+
+/* Itemized list container*/
+.monitor-list {
+  max-width: max-content;
+  overflow:hidden;
+}
+
+.monitor-item {
+  background-color: #090c09;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+}
+
+.service-label {
+  flex: 1;
+  padding: 1px 40px;
+  min-width: 100px;
+  word-break: break-word;
+  display: grid;
+}
+
+.monitor-item-buttons {
+  display: flex;
+  height: 100%;
+  margin: 10px 10px;
+}
+.monitor-item-buttons .monitor-button {
+  padding: 8px 12px;
+  white-space: nowrap;
+  width: 118px;
+}
+
+/* Headings in monitor */
+.monitor-content h1,
+.monitor-content h2,
+.monitor-content h3 {
+  color: #0f0;
+  text-shadow: 0 0 8px rgba(0, 255, 0, 0.5);
+  font-weight: bold;
+}
+
+.monitor-content h3 {
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+.monitor-content h2 {
+  margin-top: 2px;
+  margin-bottom: 15px;
+}
+
+.monitor-content h1 {
+  margin-top: 2px;
+  margin-bottom: 25px;
+}
+.monitor-content p {
+  margin-bottom: 15px;
+  color: #0f0;
+}
+
+/* Links in monitor style */
+.monitor-content a {
+  color: #0f0;
+  text-decoration: underline;
+  transition: text-shadow 0.3s ease;
+}
+.monitor-content a:hover {
+  text-shadow: 0 0 12px rgba(0, 255, 0, 0.8);
+}
+
+/* Code blocks */
+.monitor-content code {
+  background-color: #090c09;
+  color: #0f0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid #0f0;
+  text-shadow: 0 0 3px rgba(0, 255, 0, 0.3);
+}
+
+/* Button styling for monitor aesthetic */
+.monitor-button {
+  background-color: #090c09;
+  color: #0f0;
+  border: 2px solid #0f0;
+  padding: 12px;
+  font-family: 'Courier New', 'Courier', monospace;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  /*transition: all 0.3s ease;*/
+}
+
+.monitor-button:hover {
+  background-color: #0a0;
+  box-shadow: 0 0 15px rgba(0, 255, 0, 0.6);
+}
+
+.monitor-button:active {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Scanline effect overlay (optional) */
+.monitor-scanlines::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.15),
+    rgba(0, 0, 0, 0.15) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+  pointer-events: none;
+  border-radius: 8px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .monitor-frame {
+    width: 95%;
+    padding: 15px;
+  }
+
+  .monitor-bezel {
+    padding: 12px;
+  }
+
+  .monitor-screen {
+    padding: 15px;
+    min-height: 300px;
+  }
+
+  .monitor-content {
+    font-size: 14px;
+  }
+}
