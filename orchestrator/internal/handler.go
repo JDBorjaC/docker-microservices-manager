@@ -11,12 +11,24 @@ type Handler struct {
 }
 
 type PullImageRequest struct {
-	ImageId string `json:imageId`
+	ImageId string `json:"imageId"`
 }
 
 func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
+
+// PullImage godoc
+// @Summary Pull a Docker image
+// @Description Pulls a Docker image from a registry. If the image already exists locally, skips the pull.
+// @Tags images
+// @Accept json
+// @Produce json
+// @Param request body PullImageRequest true "Image to pull"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /images/pull [post]
 func (h *Handler) PullImage(c *gin.Context) {
 	var req PullImageRequest
 

@@ -20,8 +20,13 @@ func NewDockerClient() (*DockerClient, error) {
 	return &DockerClient{client: apiClient}, nil
 }
 
+func (d *DockerClient) Close() error {
+	return d.client.Close()
+}
+
 func (d *DockerClient) PullImage(ctx context.Context, imageId string) error {
 
+	//B: check if the image exists in docker host before pull
 	_, err := d.client.ImageInspect(ctx, imageId)
 	if err == nil {
 		return nil
