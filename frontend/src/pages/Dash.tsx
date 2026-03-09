@@ -39,7 +39,7 @@ export default function Dash() {
                         <div className="monitor-content">
 
                             <h1>
-                                LISTADO DE MICROSERVICIOS
+                                \\ LISTADO DE MICROSERVICIOS
                             </h1>
 
                             {/* Cada microservicio muestra NOMBRE, BTN_ON, BTN_EDIT, BTN_DEL */}
