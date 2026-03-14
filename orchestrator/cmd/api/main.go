@@ -1,24 +1,29 @@
 package main
 
 import (
-	"msmanager/orchestrator/internal"
-
 	"github.com/gin-gonic/gin"
-
-	docs "msmanager/orchestrator/docs"
-
 	swaggerfiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+
+	docs "msmanager/orchestrator/docs"
+	"msmanager/orchestrator/internal"
 )
 
 func main() {
+
+	repository, err := internal.NewRepository()
+	if err != nil {
+		panic(err)
+	}
+	defer repository.Close()
+
 	dockerClient, err := internal.NewDockerClient()
 	if err != nil {
 		panic(err)
 	}
 	defer dockerClient.Close()
 
-	service := internal.NewService(dockerClient)
+	service := internal.NewService(dockerClient, repository)
 	handler := internal.NewHandler(service)
 
 	r := gin.Default()

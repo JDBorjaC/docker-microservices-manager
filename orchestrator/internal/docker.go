@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 )
 
@@ -24,6 +25,7 @@ func (d *DockerClient) Close() error {
 	return d.client.Close()
 }
 
+// Pulls a Docker image from a registry. If the image already exists locally, skips the pull.
 func (d *DockerClient) PullImage(ctx context.Context, imageId string) error {
 
 	//B: check if the image exists in docker host before pull
@@ -42,4 +44,46 @@ func (d *DockerClient) PullImage(ctx context.Context, imageId string) error {
 		return err
 	}
 	return nil
+}
+
+func (d *DockerClient) CreateMicroservice(ctx context.Context, dir string, ms Microservice) (*client.ContainerCreateResult, error) {
+	resp, err := d.client.ContainerCreate(ctx, client.ContainerCreateOptions{
+		Image: ms.Image,
+		Name:  ms.Name,
+		HostConfig: &container.HostConfig{
+			Binds: []string{
+				dir + ":/app",
+			},
+		},
+		Config: &container.Config{
+			Tty: true,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+
+	/*
+		if _, err := d.client.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{}); err != nil {
+			panic(err)
+		}
+
+		wait := d.client.ContainerWait(ctx, resp.ID, client.ContainerWaitOptions{})
+		select {
+		case err := <-wait.Error:
+			if err != nil {
+				panic(err)
+			}
+		case <-wait.Result:
+		}
+
+		out, err := d.client.ContainerLogs(ctx, resp.ID, client.ContainerLogsOptions{ShowStdout: true})
+		if err != nil {
+			panic(err)
+		}
+
+		stdcopy.StdCopy(os.Stdout, os.Stderr, out)
+	*/
 }
