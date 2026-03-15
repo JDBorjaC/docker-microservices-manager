@@ -4,7 +4,9 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
 
+	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 )
@@ -47,12 +49,17 @@ func (d *DockerClient) PullImage(ctx context.Context, imageId string) error {
 }
 
 func (d *DockerClient) CreateMicroservice(ctx context.Context, dir string, ms Microservice) (*client.ContainerCreateResult, error) {
+
+	//Use absolute path to ensure that the Bind Volume references
+	//the right host OS directory (i.e. in case the app runs inside of a container)
+	absPath := filepath.Join(os.Getenv("HOST_SOURCE_PATH"), dir)
+
 	resp, err := d.client.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Image: ms.Image,
 		Name:  ms.Name,
 		HostConfig: &container.HostConfig{
 			Binds: []string{
-				dir + ":/app",
+				absPath + ":/app",
 			},
 		},
 		Config: &container.Config{
@@ -65,25 +72,35 @@ func (d *DockerClient) CreateMicroservice(ctx context.Context, dir string, ms Mi
 
 	return &resp, nil
 
-	/*
-		if _, err := d.client.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{}); err != nil {
-			panic(err)
-		}
+}
 
-		wait := d.client.ContainerWait(ctx, resp.ID, client.ContainerWaitOptions{})
-		select {
-		case err := <-wait.Error:
-			if err != nil {
-				panic(err)
-			}
-		case <-wait.Result:
-		}
+func (d *DockerClient) StartMicroservice(ctx context.Context, id string) error {
+	_, err := d.client.ContainerStart(ctx, id, client.ContainerStartOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
-		out, err := d.client.ContainerLogs(ctx, resp.ID, client.ContainerLogsOptions{ShowStdout: true})
-		if err != nil {
-			panic(err)
-		}
+func (d *DockerClient) LogMicroservice(ctx context.Context, id string) (*client.ContainerLogsResult, error) {
+	out, err := d.client.ContainerLogs(ctx, id, client.ContainerLogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     false,
+	})
+	if err != nil {
+		return nil, err
+	}
 
-		stdcopy.StdCopy(os.Stdout, os.Stderr, out)
-	*/
+	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
+
+	return &out, nil
+}
+
+func (d *DockerClient) StopMicroservice(ctx context.Context, id string) error {
+	_, err := d.client.ContainerStop(ctx, id, client.ContainerStopOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
 }

@@ -30,6 +30,7 @@ func main() {
 	docs.SwaggerInfo.BasePath = "/api"
 
 	r.POST("/images/pull", handler.PullImage)
+	r.POST("/containers", handler.CreateMicroservice)
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
 	r.Run(":8080")

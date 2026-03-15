@@ -3,7 +3,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: MSManager-react
+    container_name: msm-react
     ports:
       - "5173:5173"
     volumes:
@@ -17,18 +17,24 @@ services:
     build:
       context: ./orchestrator
       dockerfile: Dockerfile
-    container_name: MSManager-orchestrator
+    container_name: msm-orchestrator
     ports:
       - "8080:8080"
     volumes:
       #B: give container access to the host's Docker daemon.
       - /var/run/docker.sock:/var/run/docker.sock
+      #B: ensure that the internally created service source code becomes accesible to the docker daemon.
+      - ./microservices:/usr/src/app/microservices
+
+    environment:
+      # B: used to know the host dir where the daemon should look at from inside the container
+      - HOST_SOURCE_PATH=${PWD}
 
   runner-flask:
     build:
       context: ./runners
       dockerfile: runner-flask
-    image: msmanager-runner-flask
+    image: msm-runner-flask
     #B: This service is only built to produce the image — it should not run on its own.
     #B: Actual containers are spawned by the orchestrator at runtime.
     profiles:

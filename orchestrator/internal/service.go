@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"log"
 	"os"
 	"path/filepath"
 )
@@ -18,19 +19,29 @@ func (s *Service) PullImage(ctx context.Context, imageId string) error {
 	return s.client.PullImage(ctx, imageId)
 }
 func (s *Service) CreateMicroservice(ctx context.Context, req CreateMicroserviceRequest) error {
+
 	//TODO: prevent folder overwriting for an existing name
-	dir := filepath.Join("microservices", req.Name)
-	os.MkdirAll(dir, 0755)
+
+	// Write source code locally
+	internalDir := filepath.Join("microservices", req.Name)
+	os.MkdirAll(internalDir, 0755)
 	os.WriteFile(
-		filepath.Join(dir, "main.py"),
+		filepath.Join(internalDir, "app.py"),
 		[]byte(req.Code),
 		0644,
 	)
-	s.client.CreateMicroservice(ctx, dir, Microservice{
+
+	result, err := s.client.CreateMicroservice(ctx, internalDir, Microservice{
 		Name:        req.Name,
 		Image:       req.Image,
 		Description: req.Description,
 	})
+
+	log.Println(result)
+
+	if err != nil {
+		return err
+	}
 	//TODO: add microservice to repository
 	return nil
 }
