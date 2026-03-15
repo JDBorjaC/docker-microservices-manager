@@ -157,13 +157,12 @@
 }
 
 .service-form {
-  max-width: max-content;
   overflow:hidden;
   margin-top: 20px;
 }
 
 .code-input {
-  min-width: 1000px;
+  min-width: 650px;
   min-height: 300px;
   background-color: #090c09;
   color: #0f0;
@@ -173,11 +172,12 @@
   resize: vertical;
   font-size: 16px;
   margin-bottom: -4px;
+  width: 95%;
 }
 
 .code-input:focus {
   outline: none;
-  box-shadow: 0 0 15px rgba(0, 255, 0, 0.6);
+  box-shadow: -9px 2px 15px rgba(0, 255, 0, 0.6);
 }
 
 .drop-down-menu {
