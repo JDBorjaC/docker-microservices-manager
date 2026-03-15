@@ -27,12 +27,14 @@ func main() {
 	handler := internal.NewHandler(service)
 
 	r := gin.Default()
-	docs.SwaggerInfo.BasePath = "/api"
+	docs.SwaggerInfo.BasePath = ""
 
 	r.POST("/images/pull", handler.PullImage)
-	r.POST("/containers", handler.CreateMicroservice)
+	r.POST("/microservices", handler.CreateMicroservice)
+	r.GET("/microservices", handler.GetMicroservices)
+	r.GET("/microservices/stream/:id", handler.StreamMicroserviceLogs)
 
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
+	r.GET("/api/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
 	r.Run(":8080")
 
 }

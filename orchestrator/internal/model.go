@@ -1,10 +1,24 @@
 package internal
 
+import "time"
+
+const (
+	StatusCreated = "created"
+	StatusRunning = "running"
+	StatusFailed  = "failed"
+
+	LangFlask   = "flask"
+	LangExpress = "express"
+	LangGin     = "gin"
+	LangCargo   = "cargo"
+)
+
 type Microservice struct {
-	Id          int
-	Name        string
-	Description string
-	Image       string
-	Port        int    // host port mapped to the container
-	ContainerId string // Docker container ID
+	Id          int       `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Image       string    `json:"image"`
+	ContainerId string    `json:"container_id"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
 }

@@ -7,10 +7,10 @@ services:
     ports:
       - "5173:5173"
     volumes:
-      - ./frontend:/app #B: Sync local code (hot-reload)
+      - ./frontend:/app #Sync local code (hot-reload)
 
-      #B: Isolate node_modules (Important due to OS difference).
-      #B: To add dependencies, use docker-compose exec frontend npm install, or rebuild for every local installation.
+      #Isolate node_modules (Important due to OS difference).
+      #To add dependencies, use docker-compose exec frontend npm install, or rebuild for every local installation.
       - /app/node_modules 
   
   orchestrator_dev:
@@ -21,15 +21,15 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      #B: (DEV) hot reload
+      #DEV hot reload
       - ./orchestrator:/usr/src/app
       
-      #B: give container access to the host's Docker daemon.
+      #Give container access to the host's Docker daemon.
       - /var/run/docker.sock:/var/run/docker.sock
-      #B: ensure that the internally created service source code becomes accesible to the docker daemon.
+      #Ensure that the internally created service source code becomes accesible to the docker daemon.
       - ./microservices:/usr/src/app/microservices
     environment:
-      # B: used to know the host dir where the daemon should look at from inside the container
+      #Used to know the host dir where the daemon should look at from inside the container
       - HOST_SOURCE_PATH=${PWD}
 
   runner-flask:
@@ -37,6 +37,7 @@ services:
       context: ./runners
       dockerfile: runner-flask
     image: msm-runner-flask
-    #B: Only built to produce the image, never actually run as a service.
+    #Only built to produce the image, never actually run as a service
+    #Actual containers are spawned by the orchestrator at runtime.
     profiles:
       - build-only

@@ -5,8 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-
-	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 )
@@ -64,6 +62,10 @@ func (d *DockerClient) CreateMicroservice(ctx context.Context, dir string, ms Mi
 		},
 		Config: &container.Config{
 			Tty: true,
+			Labels: map[string]string{
+				"traefik.enable": "true",
+				"traefik.http.routers." + ms.Name + ".rule": "Host(`" + ms.Name + ".localhost`)",
+			},
 		},
 	})
 	if err != nil {
@@ -82,19 +84,17 @@ func (d *DockerClient) StartMicroservice(ctx context.Context, id string) error {
 	return nil
 }
 
-func (d *DockerClient) LogMicroservice(ctx context.Context, id string) (*client.ContainerLogsResult, error) {
+func (d *DockerClient) LogMicroservice(ctx context.Context, id string, follow bool) (io.ReadCloser, error) {
 	out, err := d.client.ContainerLogs(ctx, id, client.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
-		Follow:     false,
+		Follow:     follow,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
-
-	return &out, nil
+	return out, nil
 }
 
 func (d *DockerClient) StopMicroservice(ctx context.Context, id string) error {
@@ -103,4 +103,12 @@ func (d *DockerClient) StopMicroservice(ctx context.Context, id string) error {
 		return err
 	}
 	return nil
+}
+
+func (d *DockerClient) RemoveMicroservice(ctx context.Context, id string) error {
+	_, err := d.client.ContainerRemove(ctx, id, client.ContainerRemoveOptions{
+		RemoveVolumes: true,
+		Force:         true,
+	})
+	return err
 }

@@ -1,0 +1,6 @@
+node_modules/
+microservices/*
+.env
+api
+*.exe
+__pycache__/
