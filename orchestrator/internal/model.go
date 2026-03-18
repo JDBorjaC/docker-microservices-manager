@@ -20,5 +20,6 @@ type Microservice struct {
 	Image       string    `json:"image"`
 	ContainerId string    `json:"container_id"`
 	Status      string    `json:"status"`
+	Port        string    `json:"port"`
 	CreatedAt   time.Time `json:"created_at"`
 }

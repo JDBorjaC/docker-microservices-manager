@@ -1,4 +1,21 @@
 services:
+  traefik:
+    image: traefik:latest
+    container_name: MSManager-traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    environment:
+      - DOCKER_API_VERSION=1.44
+    ports:
+      - "80:80"
+      - "8090:8080" # Dashboard de Traefik
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - msmanager-network
   frontend:
     build:
       context: ./frontend
@@ -11,8 +28,15 @@ services:
 
       #Isolate node_modules (Important due to OS difference).
       #To add dependencies, use docker-compose exec frontend npm install, or rebuild for every local installation.
-      - /app/node_modules 
-  
+      - /app/node_modules
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.frontend.priority=1"
+      - "traefik.http.services.frontend.loadbalancer.server.port=5173"
+    networks:
+      - msmanager-network
+
   orchestrator:
     build:
       context: ./orchestrator
@@ -29,6 +53,8 @@ services:
     environment:
       #Used to know the host dir where the daemon should look at from inside the container
       - HOST_SOURCE_PATH=${PWD}
+    networks:
+      - msmanager-network
 
   runner-flask:
     build:
@@ -39,3 +65,7 @@ services:
     #Actual containers are spawned by the orchestrator at runtime.
     profiles:
       - build-only
+
+networks:
+  msmanager-network:
+    name: msmanager-network

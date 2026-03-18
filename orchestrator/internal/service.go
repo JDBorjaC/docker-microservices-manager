@@ -59,6 +59,7 @@ func (s *Service) CreateMicroservice(ctx context.Context, req CreateMicroservice
 		Description: req.Description,
 		Image:       imageName,
 		Status:      StatusCreated,
+		Port:        "5000",
 		CreatedAt:   time.Now(),
 	}
 

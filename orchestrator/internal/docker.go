@@ -59,12 +59,17 @@ func (d *DockerClient) CreateMicroservice(ctx context.Context, dir string, ms Mi
 			Binds: []string{
 				absPath + ":/app",
 			},
+			 NetworkMode: "msmanager-network",
 		},
 		Config: &container.Config{
 			Tty: true,
 			Labels: map[string]string{
 				"traefik.enable": "true",
-				"traefik.http.routers." + ms.Name + ".rule": "Host(`" + ms.Name + ".localhost`)",
+				"traefik.http.routers." + ms.Name + ".rule": "PathPrefix(`/services/" + ms.Name + "`)",
+				"traefik.http.routers." + ms.Name + ".priority": "10",
+				"traefik.http.services." + ms.Name + ".loadbalancer.server.port": ms.Port,
+				"traefik.http.middlewares." + ms.Name + "-strip.stripprefix.prefixes": "/services/" + ms.Name,
+				"traefik.http.routers." + ms.Name + ".middlewares": ms.Name + "-strip",
 			},
 		},
 	})
