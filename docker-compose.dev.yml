@@ -1,4 +1,22 @@
 services:
+  traefik:
+    image: traefik:latest
+    container_name: MSManager-traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    environment:
+      - DOCKER_API_VERSION=1.44
+    ports:
+      - "80:80"
+      - "8090:8080" # Dashboard de Traefik
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - msmanager-network
+
   frontend_dev:
     build:
       context: ./frontend
@@ -41,3 +59,7 @@ services:
     #Actual containers are spawned by the orchestrator at runtime.
     profiles:
       - build-only
+
+networks:
+  msmanager-network:
+    name: msmanager-network

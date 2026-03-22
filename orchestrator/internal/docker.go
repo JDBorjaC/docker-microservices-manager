@@ -2,9 +2,12 @@ package internal
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/containerd/errdefs"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 )
@@ -25,27 +28,6 @@ func (d *DockerClient) Close() error {
 	return d.client.Close()
 }
 
-// Pulls a Docker image from a registry. If the image already exists locally, skips the pull.
-func (d *DockerClient) PullImage(ctx context.Context, imageId string) error {
-
-	//B: check if the image exists in docker host before pull
-	_, err := d.client.ImageInspect(ctx, imageId)
-	if err == nil {
-		return nil
-	}
-
-	reader, err := d.client.ImagePull(ctx, imageId, client.ImagePullOptions{})
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
-
-	if _, err := io.Copy(os.Stdout, reader); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (d *DockerClient) CreateMicroservice(ctx context.Context, dir string, ms Microservice) (*client.ContainerCreateResult, error) {
 
 	//Use absolute path to ensure that the Bind Volume references
@@ -59,17 +41,17 @@ func (d *DockerClient) CreateMicroservice(ctx context.Context, dir string, ms Mi
 			Binds: []string{
 				absPath + ":/app",
 			},
-			 NetworkMode: "msmanager-network",
+			NetworkMode: "msmanager-network",
 		},
 		Config: &container.Config{
 			Tty: true,
 			Labels: map[string]string{
 				"traefik.enable": "true",
-				"traefik.http.routers." + ms.Name + ".rule": "PathPrefix(`/services/" + ms.Name + "`)",
-				"traefik.http.routers." + ms.Name + ".priority": "10",
-				"traefik.http.services." + ms.Name + ".loadbalancer.server.port": ms.Port,
+				"traefik.http.routers." + ms.Name + ".rule":                           "PathPrefix(`/services/" + ms.Name + "`)",
+				"traefik.http.routers." + ms.Name + ".priority":                       "10",
+				"traefik.http.services." + ms.Name + ".loadbalancer.server.port":      ms.Port,
 				"traefik.http.middlewares." + ms.Name + "-strip.stripprefix.prefixes": "/services/" + ms.Name,
-				"traefik.http.routers." + ms.Name + ".middlewares": ms.Name + "-strip",
+				"traefik.http.routers." + ms.Name + ".middlewares":                    ms.Name + "-strip",
 			},
 		},
 	})
@@ -84,6 +66,9 @@ func (d *DockerClient) CreateMicroservice(ctx context.Context, dir string, ms Mi
 func (d *DockerClient) StartMicroservice(ctx context.Context, id string) error {
 	_, err := d.client.ContainerStart(ctx, id, client.ContainerStartOptions{})
 	if err != nil {
+		if errdefs.IsNotFound(err) {
+			return fmt.Errorf("%w: container with id %s", ErrNotFound, id)
+		}
 		return err
 	}
 	return nil
@@ -96,6 +81,9 @@ func (d *DockerClient) LogMicroservice(ctx context.Context, id string, follow bo
 		Follow:     follow,
 	})
 	if err != nil {
+		if errdefs.IsNotFound(err) {
+			return nil, fmt.Errorf("%w: container with id %s", ErrNotFound, id)
+		}
 		return nil, err
 	}
 
@@ -105,6 +93,9 @@ func (d *DockerClient) LogMicroservice(ctx context.Context, id string, follow bo
 func (d *DockerClient) StopMicroservice(ctx context.Context, id string) error {
 	_, err := d.client.ContainerStop(ctx, id, client.ContainerStopOptions{})
 	if err != nil {
+		if errdefs.IsNotFound(err) {
+			return fmt.Errorf("%w: container with id %s", ErrNotFound, id)
+		}
 		return err
 	}
 	return nil
@@ -115,5 +106,11 @@ func (d *DockerClient) RemoveMicroservice(ctx context.Context, id string) error 
 		RemoveVolumes: true,
 		Force:         true,
 	})
-	return err
+	if err != nil {
+		if errdefs.IsNotFound(err) {
+			return fmt.Errorf("%w: container with id %s", ErrNotFound, id)
+		}
+		return err
+	}
+	return nil
 }

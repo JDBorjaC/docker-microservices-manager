@@ -2,9 +2,9 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -18,9 +18,7 @@ type Service struct {
 func NewService(client *DockerClient, repo *Repository) *Service {
 	return &Service{client: client, repo: repo}
 }
-func (s *Service) PullImage(ctx context.Context, imageId string) error {
-	return s.client.PullImage(ctx, imageId)
-}
+
 func (s *Service) CreateMicroservice(ctx context.Context, req CreateMicroserviceRequest) (*Microservice, error) {
 
 	// Capture duplicate name
@@ -81,17 +79,10 @@ func (s *Service) CreateMicroservice(ctx context.Context, req CreateMicroservice
 	return ms, nil
 }
 
-func (s *Service) StartAndStreamMicroservice(ctx context.Context, id int) (io.ReadCloser, error) {
-
-	//Get Container ID from DB
-	containerId, err := s.repo.GetMicroserviceContainerID(id)
-	log.Printf("Container ID: %s", containerId)
-	if err != nil {
-		return nil, err
-	}
+func (s *Service) StartAndStreamMicroservice(ctx context.Context, id int, containerId string) (io.ReadCloser, error) {
 
 	//Start Container
-	err = s.client.StartMicroservice(ctx, containerId)
+	err := s.client.StartMicroservice(ctx, containerId)
 	if err != nil {
 		s.repo.UpdateMicroserviceStatus(id, StatusFailed)
 		return nil, err
@@ -105,5 +96,62 @@ func (s *Service) StartAndStreamMicroservice(ctx context.Context, id int) (io.Re
 }
 
 func (s *Service) GetAllMicroservices() ([]Microservice, error) {
-	return s.repo.GetAllMicroservices()
+	ms, err := s.repo.GetAllMicroservices()
+	if ms == nil {
+		ms = []Microservice{}
+	}
+	return ms, err
+}
+
+func (s *Service) StopMicroservice(ctx context.Context, id int) error {
+	containerId, err := s.repo.GetMicroserviceContainerID(id)
+	if err != nil {
+		return err
+	}
+
+	err = s.client.StopMicroservice(ctx, containerId)
+	if err != nil {
+		return err
+	}
+
+	err = s.repo.UpdateMicroserviceStatus(id, StatusStopped)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *Service) ValidateMicroserviceContainerID(id int) (string, error) {
+	containerId, err := s.repo.GetMicroserviceContainerID(id)
+	if err != nil {
+		return "", err
+	}
+	return containerId, nil
+}
+
+func (s *Service) RemoveMicroservice(ctx context.Context, id int) error {
+	ms, err := s.repo.GetMicroserviceByID(id)
+	if err != nil {
+		return err
+	}
+
+	err = s.client.RemoveMicroservice(ctx, ms.ContainerId)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+
+	// Remove source code locally
+	internalDir := filepath.Join("microservices", ms.Name)
+	err = os.RemoveAll(internalDir)
+	if err != nil {
+		return err
+	}
+
+	err = s.repo.DeleteMicroservice(id)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

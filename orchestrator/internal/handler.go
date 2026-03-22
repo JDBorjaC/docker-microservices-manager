@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -15,33 +16,6 @@ type Handler struct {
 
 func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
-}
-
-// PullImage godoc
-// @Summary Pull a Docker image
-// @Description Pulls a Docker image from a registry. If the image already exists locally, skips the pull.
-// @Tags images
-// @Accept json
-// @Produce json
-// @Param request body PullImageRequest true "Image to pull"
-// @Success 200 {object} map[string]string
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /images/pull [post]
-func (h *Handler) PullImage(c *gin.Context) {
-	var req PullImageRequest
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	if err := h.service.PullImage(c.Request.Context(), req.ImageId); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "success!!!"})
 }
 
 // CreateMicroservice godoc
@@ -112,6 +86,13 @@ func (h *Handler) StreamMicroserviceLogs(c *gin.Context) {
 		return
 	}
 
+	//Verificar la integridad del id en el repositorio
+	containerId, err := h.service.ValidateMicroserviceContainerID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.Writer.Header().Set("Content-Type", "text/event-stream") //SSE header
 	c.Writer.Header().Set("Cache-Control", "no-cache")         //Avoid caching old data
 	c.Writer.Header().Set("Connection", "keep-alive")
@@ -128,7 +109,7 @@ func (h *Handler) StreamMicroserviceLogs(c *gin.Context) {
 	fmt.Fprintf(c.Writer, "event: info\ndata: Iniciando contenedor...\n\n")
 	flusher.Flush()
 
-	stream, err := h.service.StartAndStreamMicroservice(c.Request.Context(), id)
+	stream, err := h.service.StartAndStreamMicroservice(c.Request.Context(), id, containerId)
 	if err != nil {
 		fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", err.Error())
 		flusher.Flush()
@@ -152,4 +133,68 @@ func (h *Handler) StreamMicroserviceLogs(c *gin.Context) {
 		fmt.Fprintf(c.Writer, "event: info\ndata: Stream finalizado.\n\n")
 	}
 	flusher.Flush()
+}
+
+// StopMicroservice godoc
+// @Summary Stop a microservice container
+// @Description Stops a running microservice container and updates its status in the db.
+// @Tags microservices
+// @Produce json
+// @Param id path int true "Microservice Internal ID"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /microservices/stop/{id} [patch]
+func (h *Handler) StopMicroservice(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id must be an integer"})
+		return
+	}
+
+	err = h.service.StopMicroservice(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "microservice stopped"})
+}
+
+// DeleteMicroservice godoc
+// @Summary Delete a microservice container and its data
+// @Description Stops (if running), removes the container, deletes source code and db records.
+// @Tags microservices
+// @Produce json
+// @Param id path int true "Microservice Internal ID"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /microservices/{id} [delete]
+func (h *Handler) DeleteMicroservice(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id must be an integer"})
+		return
+	}
+
+	err = h.service.RemoveMicroservice(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "microservice removed"})
 }

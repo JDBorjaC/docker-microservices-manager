@@ -2,6 +2,8 @@ package internal
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -59,16 +61,6 @@ func (r *Repository) InsertMicroservice(ms *Microservice) error {
 	return nil
 }
 
-func (r *Repository) UpdateMicroserviceContainerID(id int, containerId string) error {
-	_, err := r.db.Exec(`UPDATE microservice SET container_id = ? WHERE id = ?`, containerId, id)
-	return err
-}
-
-func (r *Repository) UpdateMicroserviceStatus(id int, status string) error {
-	_, err := r.db.Exec(`UPDATE microservice SET status = ? WHERE id = ?`, status, id)
-	return err
-}
-
 func (r *Repository) GetAllMicroservices() ([]Microservice, error) {
 	rows, err := r.db.Query(`SELECT id, name, description, image, container_id, status, created_at FROM microservice ORDER BY created_at DESC`)
 	if err != nil {
@@ -90,13 +82,45 @@ func (r *Repository) GetAllMicroservices() ([]Microservice, error) {
 	return microservices, nil
 }
 
+func (r *Repository) GetMicroserviceByID(id int) (*Microservice, error) {
+	var ms Microservice
+	var containerId sql.NullString
+	err := r.db.QueryRow(`SELECT id, name, description, image, container_id, status, created_at FROM microservice WHERE id = ?`, id).Scan(&ms.Id, &ms.Name, &ms.Description, &ms.Image, &containerId, &ms.Status, &ms.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("%w: el microservicio con ese id no existe", ErrNotFound)
+		}
+		return nil, err
+	}
+	ms.ContainerId = containerId.String
+	return &ms, nil
+}
+
 func (r *Repository) GetMicroserviceContainerID(id int) (string, error) {
 	var containerId sql.NullString
 	err := r.db.QueryRow(`SELECT container_id FROM microservice WHERE id = ?`, id).Scan(&containerId)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", fmt.Errorf("%w: el microservicio con ese id no existe", ErrNotFound)
+		}
 		return "", err
 	}
 	return containerId.String, nil
+}
+
+func (r *Repository) UpdateMicroserviceContainerID(id int, containerId string) error {
+	_, err := r.db.Exec(`UPDATE microservice SET container_id = ? WHERE id = ?`, containerId, id)
+	return err
+}
+
+func (r *Repository) UpdateMicroserviceStatus(id int, status string) error {
+	_, err := r.db.Exec(`UPDATE microservice SET status = ? WHERE id = ?`, status, id)
+	return err
+}
+
+func (r *Repository) DeleteMicroservice(id int) error {
+	_, err := r.db.Exec(`DELETE FROM microservice WHERE id = ?`, id)
+	return err
 }
 
 func (r *Repository) GetMicroserviceByName(name string) (*Microservice, error) {

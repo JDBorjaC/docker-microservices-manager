@@ -6,6 +6,7 @@ const (
 	StatusCreated = "created"
 	StatusRunning = "running"
 	StatusFailed  = "failed"
+	StatusStopped = "stopped"
 
 	LangFlask   = "flask"
 	LangExpress = "express"
