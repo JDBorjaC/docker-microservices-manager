@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -38,18 +39,23 @@ func (r *Repository) Init() error {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE,
         description TEXT,
+        language TEXT,
         image TEXT,
         container_id TEXT,
         status TEXT DEFAULT 'created',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     `)
-	return err
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *Repository) InsertMicroservice(ms *Microservice) error {
-	query := `INSERT INTO microservice (name, description, image, container_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?)`
-	result, err := r.db.Exec(query, ms.Name, ms.Description, ms.Image, ms.ContainerId, ms.Status, ms.CreatedAt)
+	query := `INSERT INTO microservice (name, description, language, image, container_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+	result, err := r.db.Exec(query, ms.Name, ms.Description, ms.Language, ms.Image, ms.ContainerId, ms.Status, ms.CreatedAt)
 	if err != nil {
 		return err
 	}
@@ -62,7 +68,7 @@ func (r *Repository) InsertMicroservice(ms *Microservice) error {
 }
 
 func (r *Repository) GetAllMicroservices() ([]Microservice, error) {
-	rows, err := r.db.Query(`SELECT id, name, description, image, container_id, status, created_at FROM microservice ORDER BY created_at DESC`)
+	rows, err := r.db.Query(`SELECT id, name, description, language, image, container_id, status, created_at FROM microservice ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +78,7 @@ func (r *Repository) GetAllMicroservices() ([]Microservice, error) {
 	for rows.Next() {
 		var ms Microservice
 		var containerId sql.NullString
-		err := rows.Scan(&ms.Id, &ms.Name, &ms.Description, &ms.Image, &containerId, &ms.Status, &ms.CreatedAt)
+		err := rows.Scan(&ms.Id, &ms.Name, &ms.Description, &ms.Language, &ms.Image, &containerId, &ms.Status, &ms.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -82,13 +88,27 @@ func (r *Repository) GetAllMicroservices() ([]Microservice, error) {
 	return microservices, nil
 }
 
-func (r *Repository) GetMicroserviceByID(id int) (*Microservice, error) {
+var allowedColumns = map[string]bool{
+	"id": true, "name": true, "container_id": true, "status": true,
+	"description": true, "image": true, "language": true,
+}
+
+func (r *Repository) GetMicroserviceBy(column string, value any) (*Microservice, error) {
+	if !allowedColumns[column] {
+		return nil, fmt.Errorf("invalid column: %s", column)
+	}
+
 	var ms Microservice
 	var containerId sql.NullString
-	err := r.db.QueryRow(`SELECT id, name, description, image, container_id, status, created_at FROM microservice WHERE id = ?`, id).Scan(&ms.Id, &ms.Name, &ms.Description, &ms.Image, &containerId, &ms.Status, &ms.CreatedAt)
+	query := fmt.Sprintf(
+		`SELECT id, name, description, language, image, container_id, status, created_at FROM microservice WHERE %s = ?`, column,
+	)
+	err := r.db.QueryRow(query, value).Scan(
+		&ms.Id, &ms.Name, &ms.Description, &ms.Language, &ms.Image, &containerId, &ms.Status, &ms.CreatedAt,
+	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%w: el microservicio con ese id no existe", ErrNotFound)
+			return nil, nil
 		}
 		return nil, err
 	}
@@ -96,43 +116,32 @@ func (r *Repository) GetMicroserviceByID(id int) (*Microservice, error) {
 	return &ms, nil
 }
 
-func (r *Repository) GetMicroserviceContainerID(id int) (string, error) {
-	var containerId sql.NullString
-	err := r.db.QueryRow(`SELECT container_id FROM microservice WHERE id = ?`, id).Scan(&containerId)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", fmt.Errorf("%w: el microservicio con ese id no existe", ErrNotFound)
-		}
-		return "", err
+// UpdateMicroservice updates multiple allowed columns for a given microservice ID in a single query.
+func (r *Repository) UpdateMicroservice(id int, updates map[string]any) error {
+	if len(updates) == 0 {
+		return fmt.Errorf("no updates provided")
 	}
-	return containerId.String, nil
-}
 
-func (r *Repository) UpdateMicroserviceContainerID(id int, containerId string) error {
-	_, err := r.db.Exec(`UPDATE microservice SET container_id = ? WHERE id = ?`, containerId, id)
-	return err
-}
+	query := "UPDATE microservice SET "
+	var args []any
+	var setClauses []string
 
-func (r *Repository) UpdateMicroserviceStatus(id int, status string) error {
-	_, err := r.db.Exec(`UPDATE microservice SET status = ? WHERE id = ?`, status, id)
+	for column, value := range updates {
+		if !allowedColumns[column] {
+			return fmt.Errorf("invalid column: %s", column)
+		}
+		setClauses = append(setClauses, fmt.Sprintf("%s = ?", column))
+		args = append(args, value)
+	}
+
+	query += strings.Join(setClauses, ", ") + " WHERE id = ?"
+	args = append(args, id)
+
+	_, err := r.db.Exec(query, args...)
 	return err
 }
 
 func (r *Repository) DeleteMicroservice(id int) error {
 	_, err := r.db.Exec(`DELETE FROM microservice WHERE id = ?`, id)
 	return err
-}
-
-func (r *Repository) GetMicroserviceByName(name string) (*Microservice, error) {
-	var ms Microservice
-	var containerId sql.NullString
-	err := r.db.QueryRow(`SELECT id, name, description, image, container_id, status, created_at FROM microservice WHERE name = ?`, name).Scan(&ms.Id, &ms.Name, &ms.Description, &ms.Image, &containerId, &ms.Status, &ms.CreatedAt)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil // Not found
-		}
-		return nil, err
-	}
-	ms.ContainerId = containerId.String
-	return &ms, nil
 }

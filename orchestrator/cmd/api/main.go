@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/gin-gonic/gin"
 	swaggerfiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -24,6 +27,16 @@ func main() {
 	defer dockerClient.Close()
 
 	service := internal.NewService(dockerClient, repository)
+
+	backgroundCtx := context.Background()
+	// 1. Apagar/Prender issue: Sincronizar el estado de DB vs la realidad Docker al Boot
+	if err := service.SyncStateOnStartup(backgroundCtx); err != nil {
+		fmt.Printf("Error during startup sync: %v\n", err)
+	}
+
+	// 2. Encender la escucha infinita y pasiva de Eventos Docker
+	service.StartReconciliationLoop(backgroundCtx)
+
 	handler := internal.NewHandler(service)
 
 	r := gin.Default()
@@ -32,8 +45,10 @@ func main() {
 	r.POST("/microservices", handler.CreateMicroservice)
 	r.GET("/microservices", handler.GetMicroservices)
 	r.GET("/microservices/stream/:id", handler.StreamMicroserviceLogs)
+	r.PUT("/microservices/:id", handler.UpdateMicroservice)
 	r.PATCH("/microservices/stop/:id", handler.StopMicroservice)
 	r.DELETE("/microservices/:id", handler.DeleteMicroservice)
+	r.DELETE("/microservices", handler.DeleteAllMicroservices)
 
 	r.GET("/api/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
 	r.Run(":8080")

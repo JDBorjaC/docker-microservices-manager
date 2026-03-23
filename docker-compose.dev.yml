@@ -1,7 +1,7 @@
 services:
   traefik:
     image: traefik:latest
-    container_name: MSManager-traefik
+    container_name: msm-traefik
     command:
       - "--api.insecure=true"
       - "--providers.docker=true"
@@ -15,7 +15,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
-      - msmanager-network
+      - msm-network
 
   frontend_dev:
     build:
@@ -29,7 +29,14 @@ services:
 
       #Isolate node_modules (Important due to OS difference).
       #To add dependencies, use docker-compose exec frontend npm install, or rebuild for every local installation.
-      - /app/node_modules 
+      - /app/node_modules
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.frontend.priority=1"
+      - "traefik.http.services.frontend.loadbalancer.server.port=5173"
+    networks:
+      - msm-network
   
   orchestrator_dev:
     build:
@@ -39,27 +46,46 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      #DEV hot reload
+      #DEV hot reload (and incidentally persist SQLite database)
       - ./orchestrator:/usr/src/app
       
       #Give container access to the host's Docker daemon.
       - /var/run/docker.sock:/var/run/docker.sock
-      #Ensure that the internally created service source code becomes accesible to the docker daemon.
-      - ./microservices:/usr/src/app/microservices
-    environment:
-      #Used to know the host dir where the daemon should look at from inside the container
-      - HOST_SOURCE_PATH=${PWD}
+    networks:
+      - msm-network
 
   runner-flask:
     build:
       context: ./runners
       dockerfile: runner-flask
     image: msm-runner-flask
-    #Only built to produce the image, never actually run as a service
-    #Actual containers are spawned by the orchestrator at runtime.
+    profiles:
+      - build-only
+
+  runner-express:
+    build:
+      context: ./runners
+      dockerfile: runner-express
+    image: msm-runner-express
+    profiles:
+      - build-only
+
+  runner-gin:
+    build:
+      context: ./runners
+      dockerfile: runner-gin
+    image: msm-runner-gin
+    profiles:
+      - build-only
+
+  runner-cargo:
+    build:
+      context: ./runners
+      dockerfile: runner-cargo
+    image: msm-runner-cargo
     profiles:
       - build-only
 
 networks:
-  msmanager-network:
-    name: msmanager-network
+  msm-network:
+    name: msm-network

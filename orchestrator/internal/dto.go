@@ -1,13 +1,13 @@
 package internal
 
-type PullImageRequest struct {
-	ImageId string `json:"imageId"`
-}
-
 type CreateMicroserviceRequest struct {
-	Name        string `json:"name"`
+	Name        string `json:"name" binding:"required"`
 	Description string `json:"description"`
-	Language    string `json:"language"`
-	Code        string `json:"code"`
+	Language    string `json:"language" binding:"required"`
+	Code        string `json:"code" binding:"required"`
 }
 
+type UpdateMicroserviceRequest struct {
+	Code        *string `json:"code"`
+	Description *string `json:"description"`
+}

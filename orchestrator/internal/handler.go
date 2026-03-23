@@ -40,8 +40,16 @@ func (h *Handler) CreateMicroservice(c *gin.Context) {
 
 	ms, err := h.service.CreateMicroservice(c.Request.Context(), req)
 	if err != nil {
-		if fmt.Sprintf("microservice with name '%s' already exists", req.Name) == err.Error() {
+		if fmt.Sprintf("microservice with name '%s' already exists", req.Name) == err.Error() || errors.Is(err, ErrDuplicate) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, ErrUnsupportedLang) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, ErrBuildFailed) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "image build failed: " + err.Error()})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -167,6 +175,59 @@ func (h *Handler) StopMicroservice(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "microservice stopped"})
 }
 
+// UpdateMicroservice godoc
+// @Summary Update a microservice's code
+// @Description Rebuilds the microservice with new source code. Stops and removes the old container/image, builds a new image and creates a fresh container.
+// @Tags microservices
+// @Accept json
+// @Produce json
+// @Param id path int true "Microservice Internal ID"
+// @Param request body UpdateMicroserviceRequest true "New code and optional description"
+// @Success 200 {object} Microservice
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 422 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /microservices/{id} [put]
+func (h *Handler) UpdateMicroservice(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id must be an integer"})
+		return
+	}
+
+	var req UpdateMicroserviceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ms, err := h.service.UpdateMicroservice(c.Request.Context(), id, req)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "microservice not found"})
+			return
+		}
+		if errors.Is(err, ErrUnsupportedLang) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, ErrBuildFailed) {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "image build failed: " + err.Error()})
+			return
+		}
+		if errors.Is(err, ErrContainerFailed) {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "container creation failed: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, ms)
+}
+
 // DeleteMicroservice godoc
 // @Summary Delete a microservice container and its data
 // @Description Stops (if running), removes the container, deletes source code and db records.
@@ -196,5 +257,22 @@ func (h *Handler) DeleteMicroservice(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error: " + err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "microservice removed"})
+	c.JSON(http.StatusOK, gin.H{"message": "microservice deleted"})
+}
+
+// DeleteAllMicroservices godoc
+// @Summary Delete all microservices
+// @Description Stops and removes all microservice containers, custom images, and database entries.
+// @Tags microservices
+// @Produce json
+// @Success 200 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /microservices [delete]
+func (h *Handler) DeleteAllMicroservices(c *gin.Context) {
+	err := h.service.DeleteAllMicroservices(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "some microservices failed to delete: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "all microservices deleted successfully"})
 }

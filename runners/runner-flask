@@ -4,8 +4,6 @@ WORKDIR /app
 
 RUN pip install flask
 
-
-#B: Prevent code execution with root permissions
 RUN useradd -m runner
 USER runner
 

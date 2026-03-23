@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -19,10 +20,26 @@ func NewService(client *DockerClient, repo *Repository) *Service {
 	return &Service{client: client, repo: repo}
 }
 
+// langConfig holds language-specific metadata for building microservice images.
+type langConfig struct {
+	BaseImage    string // Pre-built runner image to use as FROM base
+	SourceFile   string // Filename for the user's source code
+	DestPath     string // Destination path inside the container for the source code
+	InternalPort string // Port the runner listens on inside the container
+	SyntaxCheck  string // Command to run during build to validate syntax
+}
+
+var supportedLanguages = map[string]langConfig{
+	LangFlask:   {BaseImage: "msm-runner-flask", SourceFile: "app.py", DestPath: "/app/app.py", InternalPort: "5000", SyntaxCheck: "python -m py_compile /app/app.py"},
+	LangExpress: {BaseImage: "msm-runner-express", SourceFile: "app.js", DestPath: "/app/app.js", InternalPort: "3000", SyntaxCheck: "node -c /app/app.js"},
+	LangGin:     {BaseImage: "msm-runner-gin", SourceFile: "main.go", DestPath: "/app/main.go", InternalPort: "8080", SyntaxCheck: "go build -o /dev/null /app/main.go"},
+	LangCargo:   {BaseImage: "msm-runner-cargo", SourceFile: "main.rs", DestPath: "/app/src/main.rs", InternalPort: "8080", SyntaxCheck: "cargo build --release"},
+}
+
 func (s *Service) CreateMicroservice(ctx context.Context, req CreateMicroserviceRequest) (*Microservice, error) {
 
 	// Capture duplicate name
-	existingMs, err := s.repo.GetMicroserviceByName(req.Name)
+	existingMs, err := s.repo.GetMicroserviceBy("name", req.Name)
 	if err != nil {
 		return nil, err // Unexpected DB error
 	}
@@ -30,49 +47,61 @@ func (s *Service) CreateMicroservice(ctx context.Context, req CreateMicroservice
 		return nil, fmt.Errorf("microservice with name '%s' already exists", req.Name)
 	}
 
-	// Map language to docker image
-	imageMap := map[string]string{
-		LangFlask:   "msm-runner-flask",
-		LangExpress: "msm-runner-express",
-		LangGin:     "msm-runner-gin",
-		LangCargo:   "msm-runner-cargo",
-	}
-
-	imageName, exists := imageMap[req.Language]
+	// Resolve language config
+	lang, exists := supportedLanguages[req.Language]
 	if !exists {
-		return nil, fmt.Errorf("unsupported language: %s", req.Language)
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedLang, req.Language)
 	}
 
-	// Write source code locally
-	internalDir := filepath.Join("microservices", req.Name)
-	os.MkdirAll(internalDir, 0755)
+	// Write source code + Dockerfile locally
+	buildDir := filepath.Join("microservices", req.Name)
+	os.MkdirAll(buildDir, 0755)
+	defer os.RemoveAll(buildDir)
+
 	os.WriteFile(
-		filepath.Join(internalDir, "app.py"),
+		filepath.Join(buildDir, lang.SourceFile),
 		[]byte(req.Code),
 		0644,
 	)
 
+	dockerfile := fmt.Sprintf("FROM %s\nUSER root\nCOPY %s %s\nRUN chown -R runner /app\nUSER runner\nRUN %s\n", 
+		lang.BaseImage, lang.SourceFile, lang.DestPath, lang.SyntaxCheck)
+	os.WriteFile(
+		filepath.Join(buildDir, "Dockerfile"),
+		[]byte(dockerfile),
+		0644,
+	)
+
+	// Build the custom image
+	customImageName := "msm-" + req.Name + ":latest"
+	if err := s.client.BuildImage(ctx, buildDir, customImageName); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrBuildFailed, err)
+	}
+
 	ms := &Microservice{
 		Name:        req.Name,
 		Description: req.Description,
-		Image:       imageName,
+		Language:    req.Language,
+		Image:       customImageName,
 		Status:      StatusCreated,
-		Port:        "5000",
 		CreatedAt:   time.Now(),
 	}
 
-	// Create Container
-	result, err := s.client.CreateMicroservice(ctx, internalDir, *ms)
+	// Create Container from the custom-built image
+	result, err := s.client.CreateMicroservice(ctx, *ms, lang.InternalPort)
 	if err != nil {
-		return nil, err
+		// ROLLBACK: remove the built image
+		s.client.RemoveImage(context.Background(), customImageName)
+		return nil, fmt.Errorf("%w: %v", ErrContainerFailed, err)
 	}
 
 	// Save Container ID and Insert into DB
 	ms.ContainerId = result.ID
 
 	if err := s.repo.InsertMicroservice(ms); err != nil {
-		// ROLLBACK (Docker)
+		// ROLLBACK (Docker container + image)
 		s.client.RemoveMicroservice(context.Background(), ms.ContainerId)
+		s.client.RemoveImage(context.Background(), customImageName)
 		return nil, err
 	}
 
@@ -84,12 +113,12 @@ func (s *Service) StartAndStreamMicroservice(ctx context.Context, id int, contai
 	//Start Container
 	err := s.client.StartMicroservice(ctx, containerId)
 	if err != nil {
-		s.repo.UpdateMicroserviceStatus(id, StatusFailed)
+		s.repo.UpdateMicroservice(id, map[string]any{"status": StatusFailed})
 		return nil, err
 	}
 
 	//Update Status to Running
-	s.repo.UpdateMicroserviceStatus(id, StatusRunning)
+	s.repo.UpdateMicroservice(id, map[string]any{"status": StatusRunning})
 
 	//Stream Logs
 	return s.client.LogMicroservice(ctx, containerId, true)
@@ -104,36 +133,79 @@ func (s *Service) GetAllMicroservices() ([]Microservice, error) {
 }
 
 func (s *Service) StopMicroservice(ctx context.Context, id int) error {
-	containerId, err := s.repo.GetMicroserviceContainerID(id)
+	ms, err := s.repo.GetMicroserviceBy("id", id)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return ErrNotFound
+	}
+
+	err = s.client.StopMicroservice(ctx, ms.ContainerId)
 	if err != nil {
 		return err
 	}
 
-	err = s.client.StopMicroservice(ctx, containerId)
-	if err != nil {
-		return err
-	}
-
-	err = s.repo.UpdateMicroserviceStatus(id, StatusStopped)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return s.repo.UpdateMicroservice(id, map[string]any{"status": StatusStopped})
 }
 
 func (s *Service) ValidateMicroserviceContainerID(id int) (string, error) {
-	containerId, err := s.repo.GetMicroserviceContainerID(id)
+	ms, err := s.repo.GetMicroserviceBy("id", id)
 	if err != nil {
 		return "", err
 	}
-	return containerId, nil
+	if ms == nil {
+		return "", ErrNotFound
+	}
+	return ms.ContainerId, nil
+}
+
+func (s *Service) SyncStateOnStartup(ctx context.Context) error {
+	microservices, err := s.repo.GetAllMicroservices()
+	if err != nil {
+		return err
+	}
+
+	for _, ms := range microservices {
+		if ms.Status == StatusCreated || ms.Status == StatusRunning {
+			if ms.ContainerId == "" {
+				continue
+			}
+			running, err := s.client.IsContainerRunning(ctx, ms.ContainerId)
+			if err != nil {
+				fmt.Printf("Error verificando contenedor %s: %v\n", ms.Name, err)
+				continue
+			}
+			if !running {
+				fmt.Printf("Sync: Microservicio %s no estaba corriendo.\n", ms.Name)
+				s.repo.UpdateMicroservice(ms.Id, map[string]any{"status": StatusFailed})
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Service) StartReconciliationLoop(ctx context.Context) {
+	s.client.WatchContainerEvents(ctx, func(containerID string) {
+		ms, err := s.repo.GetMicroserviceBy("container_id", containerID)
+		if err != nil || ms == nil {
+			return // Pertenece a otro proceso ajeno
+		}
+
+		if ms.Status == StatusRunning || ms.Status == StatusCreated {
+			fmt.Printf("Reconciliación Activa: Detectado crash en %s. Marcando como failed.\n", ms.Name)
+			s.repo.UpdateMicroservice(ms.Id, map[string]any{"status": StatusFailed})
+		}
+	})
 }
 
 func (s *Service) RemoveMicroservice(ctx context.Context, id int) error {
-	ms, err := s.repo.GetMicroserviceByID(id)
+	ms, err := s.repo.GetMicroserviceBy("id", id)
 	if err != nil {
 		return err
+	}
+	if ms == nil {
+		return ErrNotFound
 	}
 
 	err = s.client.RemoveMicroservice(ctx, ms.ContainerId)
@@ -141,11 +213,10 @@ func (s *Service) RemoveMicroservice(ctx context.Context, id int) error {
 		return err
 	}
 
-	// Remove source code locally
-	internalDir := filepath.Join("microservices", ms.Name)
-	err = os.RemoveAll(internalDir)
+	// Remove the custom-built Docker image
+	err = s.client.RemoveImage(ctx, ms.Image)
 	if err != nil {
-		return err
+		fmt.Printf("Warning: could not remove image %s: %v\n", ms.Image, err)
 	}
 
 	err = s.repo.DeleteMicroservice(id)
@@ -154,4 +225,105 @@ func (s *Service) RemoveMicroservice(ctx context.Context, id int) error {
 	}
 
 	return nil
+}
+
+func (s *Service) DeleteAllMicroservices(ctx context.Context) error {
+	microservices, err := s.GetAllMicroservices()
+	if err != nil {
+		return err
+	}
+
+	var errs []string
+	for _, ms := range microservices {
+		if err := s.RemoveMicroservice(ctx, ms.Id); err != nil {
+			errs = append(errs, fmt.Sprintf("failed to delete MS %d: %v", ms.Id, err))
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("errors occurred during deletion: %s", strings.Join(errs, ", "))
+	}
+	return nil
+}
+
+func (s *Service) UpdateMicroservice(ctx context.Context, id int, req UpdateMicroserviceRequest) (*Microservice, error) {
+	// Fetch existing microservice
+	ms, err := s.repo.GetMicroserviceBy("id", id)
+	if err != nil {
+		return nil, err
+	}
+	if ms == nil {
+		return nil, ErrNotFound
+	}
+
+	// Update description if provided
+	if req.Description != nil {
+		ms.Description = *req.Description
+		if err := s.repo.UpdateMicroservice(id, map[string]any{"description": ms.Description}); err != nil {
+			return nil, err
+		}
+	}
+
+	// If no code is updated, updated
+	if req.Code == nil {
+		return ms, nil
+	}
+
+	// Resolve final Language to use
+	lang, exists := supportedLanguages[ms.Language]
+	if !exists {
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedLang, ms.Language)
+	}
+
+	// We must have code to rebuild.
+	codeToInject := *req.Code
+
+	// Write new files & Build BEFORE destroying old container
+	buildDir := filepath.Join("microservices", ms.Name)
+	if err := os.MkdirAll(buildDir, 0755); err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(buildDir)
+
+	if err := os.WriteFile(filepath.Join(buildDir, lang.SourceFile), []byte(codeToInject), 0644); err != nil {
+		return nil, err
+	}
+
+	dockerfile := fmt.Sprintf("FROM %s\nUSER root\nCOPY %s %s\nRUN chown -R runner /app\nUSER runner\nRUN %s\n", 
+		lang.BaseImage, lang.SourceFile, lang.DestPath, lang.SyntaxCheck)
+	if err := os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte(dockerfile), 0644); err != nil {
+		return nil, err
+	}
+
+	// Build new image (Docker will strip the tag from the old image if successful)
+	customImageName := "msm-" + ms.Name + ":latest"
+	if err := s.client.BuildImage(ctx, buildDir, customImageName); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrBuildFailed, err)
+	}
+
+	// Now it's safe to destroy old container
+	s.client.StopMicroservice(ctx, ms.ContainerId)
+	s.client.RemoveMicroservice(ctx, ms.ContainerId)
+
+	// Create new container
+	ms.Image = customImageName
+	ms.Status = StatusCreated
+	result, err := s.client.CreateMicroservice(ctx, *ms, lang.InternalPort)
+	if err != nil {
+		s.client.RemoveImage(context.Background(), customImageName)
+		return nil, fmt.Errorf("%w: %v", ErrContainerFailed, err)
+	}
+
+	// Update repository
+	ms.ContainerId = result.ID
+	updates := map[string]any{
+		"container_id": ms.ContainerId,
+		"image":        ms.Image,
+		"status":       StatusCreated,
+	}
+	if err := s.repo.UpdateMicroservice(id, updates); err != nil {
+		return nil, err
+	}
+
+	return ms, nil
 }

@@ -1,0 +1,15 @@
+FROM rust:1.85-slim
+
+WORKDIR /app
+
+RUN cargo init --name runner . && \
+    echo 'actix-web = "4"' >> Cargo.toml && \
+    echo 'serde = { version = "1", features = ["derive"] }' >> Cargo.toml && \
+    echo 'serde_json = "1"' >> Cargo.toml && \
+    cargo build --release && \
+    rm src/main.rs
+
+RUN useradd -m runner
+USER runner
+
+CMD ["cargo", "run", "--release"]
