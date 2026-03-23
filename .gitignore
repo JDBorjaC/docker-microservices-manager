@@ -6,3 +6,5 @@ api
 __pycache__/
 tmp/
 orchestrator/tmp/
+**/*.db
+orchestrator/data.db

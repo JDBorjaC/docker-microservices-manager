@@ -1,4 +1,4 @@
-data.db
+*.db
 docs/
 tmp/
 microservices/

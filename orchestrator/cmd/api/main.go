@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-contrib/cors"
 	swaggerfiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
@@ -41,6 +42,8 @@ func main() {
 
 	r := gin.Default()
 	docs.SwaggerInfo.BasePath = ""
+
+	r.Use(cors.Default())
 
 	r.POST("/microservices", handler.CreateMicroservice)
 	r.GET("/microservices", handler.GetMicroservices)
