@@ -2,36 +2,51 @@
   color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
   background-color: #100e11;
+  overflow: hidden;
 }
 
 
 /*Estas clases componen el diseño de 'terminal' de la página.*/
-/* Main monitor container */
-.monitor-frame {
-  width: 90%;
-  max-width: 1200px;
-  margin: 4px auto;
-  background: linear-gradient(360deg, #27342a -5%, #212621 25%);
-  border-radius: 8px;
-  padding: 55px;
-  box-shadow:
-            inset 0 2px 5px rgba(255, 255, 255, 0.1),
-            inset 0 -2px 5px rgba(0, 0, 0, 0.5),
-            0 20px 60px rgba(0, 0, 0, 0.451);
+.dash-div,
+.micro-editor {
+  top: 6vh;
+  position: relative;
 }
 
-/* Monitor bezel (the thick frame) */
+/* Main monitor container */
+.wrapper {
+  display: grid;
+  width: fit-content;
+  margin: 0 auto;
+}
+
+.monitor-img,
+.monitor-hole {
+  grid-column: 1;
+  grid-row: 1;        /* stackear el hueco para la pantalla y el chasis en la misma celda */
+}
+
+.monitor-hole {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 5.3% 1% 1% 10.05%;
+  width: 1175px;
+  height: 558px;
+}
+
 .monitor-bezel {
   background: linear-gradient(180deg, #121c12 97%, #213228 101%);
   border-radius: 0px;
   padding: 10px;
+  height: 100%;
+  width: 100%;
   box-shadow:
             inset -0.00001px -3px 2px rgba(20, 94, 20, 0.59),
             inset 3px 3px 3px rgba(1, 13, 0, 0.93),
             inset -3px -0.00001px 3px rgba(1, 13, 0, 0.93);
 }
 
-/* The actual screen */
 .monitor-screen {
   background-color: #0f150f;
   border-radius: 8px;
@@ -42,7 +57,8 @@
   border: 2px solid #091209;
   min-height: 400px;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  height: 89%;
 }
 
 /* Screen content */
@@ -59,14 +75,12 @@
   max-width: max-content;
   overflow:hidden;
 }
-
 .monitor-item {
   background-color: #090c09;
   border: 2px solid;
   display: flex;
   align-items: center;
 }
-
 .service-label {
   flex: 1;
   padding: 1px 40px;
@@ -94,17 +108,14 @@
   text-shadow: 0 0 8px rgba(0, 255, 0, 0.5);
   font-weight: bold;
 }
-
 .monitor-content h3 {
   margin-top: 2px;
   margin-bottom: 2px;
 }
-
 .monitor-content h2 {
   margin-top: 2px;
   margin-bottom: 15px;
 }
-
 .monitor-content h1 {
   margin-top: 2px;
   margin-bottom: 25px;

@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Service } from '../models/msm_models';
 import '../styles/monitor.css';
+import MonitorBackdrop from '../components/monitor';
 
-export default function Dash() {
+export function Dash() {
 
     const navi = useNavigate();
 
@@ -65,7 +66,7 @@ export default function Dash() {
         <div className="dash-div">
         
         {/* TERMINAL DE MICROSERVICIOS */}
-        <div className="monitor-frame">
+        <MonitorBackdrop>
             <div className="monitor-bezel">
                 <div className="monitor-screen">
                     <div className='monitor-scanlines'>
@@ -107,9 +108,10 @@ export default function Dash() {
                     </div>
                 </div>
             </div>
-        </div>
+        </MonitorBackdrop>
         {/*--- fin de terminal de microservicios ---*/}
 
         </div>
     )
 }
+

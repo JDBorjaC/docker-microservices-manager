@@ -1,0 +1,18 @@
+.wrapper {
+  display: grid;
+  width: fit-content;
+  margin: 0 auto;
+}
+
+.monitor-img,
+.monitor-hole {
+  grid-column: 1;
+  grid-row: 1;        /* stacks both on the same cell */
+}
+
+.monitor-hole {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 7.5% 10.5% 21.5% 10.5%; /* push content away from the bezel */
+}

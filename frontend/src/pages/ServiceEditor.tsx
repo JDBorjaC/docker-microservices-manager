@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { Service } from '../models/msm_models'
+import MonitorBackdrop from '../components/monitor';
 
 
 
@@ -25,12 +26,12 @@ export default function ServiceEditor(){
     return (
         <div className="micro-editor">
         {/* EDITOR DE MICROSERVICIO */}
-        <div className="monitor-frame">
+        <MonitorBackdrop>
             <div className="monitor-bezel">
                 <div className="monitor-screen">
                     <div className='monitor-scanlines'>
                         <div className="monitor-content">
-
+            
                             <h1>
                                 \\ EDITAR O CREAR MICROSERVICIO
                             </h1>
@@ -62,7 +63,7 @@ export default function ServiceEditor(){
                     </div>
                 </div>
             </div>
-        </div>
+        </MonitorBackdrop>
         </div>
     )
 }
