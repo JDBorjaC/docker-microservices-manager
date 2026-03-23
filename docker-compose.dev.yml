@@ -54,37 +54,7 @@ services:
     networks:
       - msm-network
 
-  runner-flask:
-    build:
-      context: ./runners
-      dockerfile: runner-flask
-    image: msm-runner-flask
-    profiles:
-      - build-only
 
-  runner-express:
-    build:
-      context: ./runners
-      dockerfile: runner-express
-    image: msm-runner-express
-    profiles:
-      - build-only
-
-  runner-gin:
-    build:
-      context: ./runners
-      dockerfile: runner-gin
-    image: msm-runner-gin
-    profiles:
-      - build-only
-
-  runner-cargo:
-    build:
-      context: ./runners
-      dockerfile: runner-cargo
-    image: msm-runner-cargo
-    profiles:
-      - build-only
 
 networks:
   msm-network:

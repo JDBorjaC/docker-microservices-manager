@@ -20,20 +20,53 @@ func NewService(client *DockerClient, repo *Repository) *Service {
 	return &Service{client: client, repo: repo}
 }
 
-// langConfig holds language-specific metadata for building microservice images.
 type langConfig struct {
-	BaseImage    string // Pre-built runner image to use as FROM base
-	SourceFile   string // Filename for the user's source code
-	DestPath     string // Destination path inside the container for the source code
-	InternalPort string // Port the runner listens on inside the container
-	SyntaxCheck  string // Command to run during build to validate syntax
+	BaseImage    string
+	Dependencies string
+	SourceFile   string
+	DestPath     string
+	InternalPort string
+	SyntaxCheck  string
+	RunCmd       string
 }
 
 var supportedLanguages = map[string]langConfig{
-	LangFlask:   {BaseImage: "msm-runner-flask", SourceFile: "app.py", DestPath: "/app/app.py", InternalPort: "5000", SyntaxCheck: "python -m py_compile /app/app.py"},
-	LangExpress: {BaseImage: "msm-runner-express", SourceFile: "app.js", DestPath: "/app/app.js", InternalPort: "3000", SyntaxCheck: "node -c /app/app.js"},
-	LangGin:     {BaseImage: "msm-runner-gin", SourceFile: "main.go", DestPath: "/app/main.go", InternalPort: "8080", SyntaxCheck: "go build -o /dev/null /app/main.go"},
-	LangCargo:   {BaseImage: "msm-runner-cargo", SourceFile: "main.rs", DestPath: "/app/src/main.rs", InternalPort: "8080", SyntaxCheck: "cargo build --release"},
+	LangFlask: {
+		BaseImage:    "python:3.9-slim",
+		Dependencies: "RUN pip install flask",
+		SourceFile:   "app.py",
+		DestPath:     "/app/app.py",
+		InternalPort: "5000",
+		SyntaxCheck:  "python -m py_compile /app/app.py",
+		RunCmd:       `CMD ["python", "app.py"]`,
+	},
+	LangExpress: {
+		BaseImage:    "node:22-alpine",
+		Dependencies: "RUN npm init -y && npm install express",
+		SourceFile:   "app.js",
+		DestPath:     "/app/app.js",
+		InternalPort: "3000",
+		SyntaxCheck:  "node -c /app/app.js",
+		RunCmd:       `CMD ["node", "app.js"]`,
+	},
+	LangGin: {
+		BaseImage:    "golang:1.25.6",
+		Dependencies: "RUN go mod init runner && go get github.com/gin-gonic/gin",
+		SourceFile:   "main.go",
+		DestPath:     "/app/main.go",
+		InternalPort: "8080",
+		SyntaxCheck:  "go build -o /dev/null /app/main.go",
+		RunCmd:       `CMD ["go", "run", "main.go"]`,
+	},
+	LangCargo: {
+		BaseImage:    "rust:1.85-slim",
+		Dependencies: "RUN cargo init --name runner . && echo 'actix-web = \"4\"' >> Cargo.toml && echo 'serde = { version = \"1\", features = [\"derive\"] }' >> Cargo.toml && echo 'serde_json = \"1\"' >> Cargo.toml && cargo build --release && rm src/main.rs",
+		SourceFile:   "main.rs",
+		DestPath:     "/app/src/main.rs",
+		InternalPort: "8080",
+		SyntaxCheck:  "cargo build --release",
+		RunCmd:       `CMD ["cargo", "run", "--release"]`,
+	},
 }
 
 func (s *Service) CreateMicroservice(ctx context.Context, req CreateMicroserviceRequest) (*Microservice, error) {
@@ -64,8 +97,8 @@ func (s *Service) CreateMicroservice(ctx context.Context, req CreateMicroservice
 		0644,
 	)
 
-	dockerfile := fmt.Sprintf("FROM %s\nUSER root\nCOPY %s %s\nRUN chown -R runner /app\nUSER runner\nRUN %s\n", 
-		lang.BaseImage, lang.SourceFile, lang.DestPath, lang.SyntaxCheck)
+	dockerfile := fmt.Sprintf("FROM %s\nWORKDIR /app\nRUN (useradd -m runner || adduser -D runner) || true\n%s\nCOPY %s %s\nRUN chown -R runner /app\nUSER runner\nRUN %s\n%s\n",
+		lang.BaseImage, lang.Dependencies, lang.SourceFile, lang.DestPath, lang.SyntaxCheck, lang.RunCmd)
 	os.WriteFile(
 		filepath.Join(buildDir, "Dockerfile"),
 		[]byte(dockerfile),
@@ -289,8 +322,8 @@ func (s *Service) UpdateMicroservice(ctx context.Context, id int, req UpdateMicr
 		return nil, err
 	}
 
-	dockerfile := fmt.Sprintf("FROM %s\nUSER root\nCOPY %s %s\nRUN chown -R runner /app\nUSER runner\nRUN %s\n", 
-		lang.BaseImage, lang.SourceFile, lang.DestPath, lang.SyntaxCheck)
+	dockerfile := fmt.Sprintf("FROM %s\nWORKDIR /app\nRUN (useradd -m runner || adduser -D runner) || true\n%s\nCOPY %s %s\nRUN chown -R runner /app\nUSER runner\nRUN %s\n%s\n",
+		lang.BaseImage, lang.Dependencies, lang.SourceFile, lang.DestPath, lang.SyntaxCheck, lang.RunCmd)
 	if err := os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte(dockerfile), 0644); err != nil {
 		return nil, err
 	}
