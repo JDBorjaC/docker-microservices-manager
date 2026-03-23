@@ -77,6 +77,37 @@ func (h *Handler) GetMicroservices(c *gin.Context) {
 	c.JSON(http.StatusOK, microservices)
 }
 
+// GetMicroserviceByID godoc
+// @Summary Get a microservice by ID
+// @Description Retrieves a microservice by its internal ID
+// @Tags microservices
+// @Produce json
+// @Param id path int true "Microservice Internal ID"
+// @Success 200 {object} Microservice
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /microservices/{id} [get]
+func (h *Handler) GetMicroserviceByID(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id must be an integer"})
+		return
+	}
+
+	ms, err := h.service.GetMicroserviceByID(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if ms == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "microservice not found"})
+		return
+	}
+	c.JSON(http.StatusOK, ms)
+}
+
 // StreamMicroserviceLogs godoc
 // @Summary Stream logs for a microservice via SSE
 // @Description Starts the container and streams its logs via Server-Sent Events until it completes.

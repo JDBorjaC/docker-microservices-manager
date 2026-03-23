@@ -47,6 +47,7 @@ func main() {
 
 	r.POST("/microservices", handler.CreateMicroservice)
 	r.GET("/microservices", handler.GetMicroservices)
+	r.GET("microservices/:id", handler.GetMicroserviceByID)
 	r.GET("/microservices/stream/:id", handler.StreamMicroserviceLogs)
 	r.PUT("/microservices/:id", handler.UpdateMicroservice)
 	r.PATCH("/microservices/stop/:id", handler.StopMicroservice)

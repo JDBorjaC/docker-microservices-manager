@@ -165,6 +165,10 @@ func (s *Service) GetAllMicroservices() ([]Microservice, error) {
 	return ms, err
 }
 
+func (s *Service) GetMicroserviceByID(ctx context.Context, id int) (*Microservice, error) {
+	return s.repo.GetMicroserviceBy("id", id)
+}
+
 func (s *Service) StopMicroservice(ctx context.Context, id int) error {
 	ms, err := s.repo.GetMicroserviceBy("id", id)
 	if err != nil {
