@@ -4,3 +4,5 @@ microservices/
 api
 *.exe
 __pycache__/
+tmp/
+orchestrator/tmp/

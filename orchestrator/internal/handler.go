@@ -28,6 +28,7 @@ func NewHandler(service *Service) *Handler {
 // @Success 201 {object} Microservice
 // @Failure 400 {object} map[string]string
 // @Failure 409 {object} map[string]string
+// @Failure 422 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /microservices [post]
 func (h *Handler) CreateMicroservice(c *gin.Context) {
@@ -83,6 +84,7 @@ func (h *Handler) GetMicroservices(c *gin.Context) {
 // @Produce text/event-stream
 // @Param id path int true "Microservice Internal ID"
 // @Success 200 {string} string "SSE Stream"
+// @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /microservices/stream/{id} [get]
