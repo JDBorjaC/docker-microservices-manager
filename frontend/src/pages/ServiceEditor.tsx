@@ -38,6 +38,7 @@ export default function ServiceEditor(){
 
         const isEdit = editable && editable.id && editable.id !== "-1337";
         console.log("editing?: ",isEdit)
+        var success:boolean = false
 
         try {
             if (isEdit) {
@@ -67,13 +68,15 @@ export default function ServiceEditor(){
 
                 if (!response.ok) throw new Error(`POST failed: ${response.statusText}`);
             }
-
             localStorage.removeItem("editService");
+            success = true
         } catch (error) {
             console.error("Error creando/actualizando servicio:", error);
         } finally {
             setLoading(false);
-            navi("/admin");
+            if(success){
+                navi("/admin")
+            }
         }
     }
 

@@ -20,7 +20,7 @@ export function Dash() {
         //acceder al archivo del microservicio() dentro del contenedor, para cargarlo en la pag siguiente
         //espero que el backend me mande un Service con todos los campos definidos
 
-        const backResponse = await fetch(backend_service+"get-by-id/"+id);
+        const backResponse = await fetch(backend_service+"microservices/"+id);
         const userCode:Service = await backResponse.json();
                 
         try {
@@ -93,7 +93,10 @@ export function Dash() {
 
                                 {/* BTN_CREATE MICROSERVICIO */}
                                 <div className='create-service-div'>
-                                    <button className='monitor-button' onClick={() => navi("/edit")}>
+                                    <button className='monitor-button' onClick={() => {
+                                        localStorage.removeItem("editService")
+                                        navi("/edit");
+                                        }}>
                                         CREAR MICROSERVICIO
                                     </button>
                                 </div>
