@@ -12,23 +12,9 @@ export function Dash() {
 
     const [services, setServices] = useState<Service[]>([]);
 
-    const toggleService = (id:string):void => {
-        console.log("toca apagar o prender idk")
-    };
-
     const editService = async (id:string):Promise<void> => {
-        //acceder al archivo del microservicio() dentro del contenedor, para cargarlo en la pag siguiente
-        //espero que el backend me mande un Service con todos los campos definidos
-
-        const backResponse = await fetch(backend_service+"microservices/"+id);
-        const userCode:Service = await backResponse.json();
-                
-        try {
-            localStorage.setItem('editService', JSON.stringify(userCode));
-            navi("/edit")
-        } catch (err) {
-            console.error("Algo salió mal tratando de guardar el servicio a editar:\n", err);
-        }
+        //la info del service a editar se carga on pageload
+        navi("/deets/"+id);
     };
 
     const deleteService = async (id:string):Promise<void> => {
@@ -50,7 +36,7 @@ export function Dash() {
         //espero que el backend me mande un arreglo de Service, pero sin el campo de 'code' definido
         const backResponse =  await fetch(backend_service+"microservices");
         const services:Service[] = await backResponse.json();  // toca estar atento a cambios del modelo
-        setServices(services); //parsear bien el status!!!
+        setServices(services); 
     }
 
     //ON PAGELOAD: fetch services from backend
@@ -84,19 +70,16 @@ export function Dash() {
                                             <span>https://www.test.com.co/sumar-microservicio/pyth</span>
                                         </div>
                                         <div className='monitor-item-buttons'>
-                                            <button className='monitor-button' onClick={() => toggleService(service.id)}>{service.status}</button>
-                                            <button className='monitor-button' onClick={() => editService(service.id)}>Edit</button>
-                                            <button className='monitor-button' onClick={() => deleteService(service.id)}>Delete</button>
+                                            <button className='monitor-button'>{service.status}</button>
+                                            <button className='monitor-button' onClick={() => editService(service.id)}>opciones</button>
+                                            <button className='monitor-button' onClick={() => deleteService(service.id)}>eliminar</button>
                                         </div>
                                     </div>
                                 ))}
 
                                 {/* BTN_CREATE MICROSERVICIO */}
                                 <div className='create-service-div'>
-                                    <button className='monitor-button' onClick={() => {
-                                        localStorage.removeItem("editService")
-                                        navi("/edit");
-                                        }}>
+                                    <button className='monitor-button' onClick={() => navi("/edit")}>
                                         CREAR MICROSERVICIO
                                     </button>
                                 </div>

@@ -1,77 +1,44 @@
 import { useState } from 'react';
-import type { Service, ServiceCreateForm, ServiceUpdateForm } from '../models/msm_models'
+import type { ServiceCreateForm } from '../models/msm_models'
 import MonitorBackdrop from '../components/monitor';
 import { useNavigate } from 'react-router-dom';
 
 const backendUrl = "http://localhost:8080/microservices";
 
-export default function ServiceEditor(){
+export default function ServiceCreator(){
 
     const navi = useNavigate();
 
-    const [editable] = useState(():Service => {
-        //cargar editService si es que está
-        const e = localStorage.getItem("editService");
-        console.log(e)
-        return e ? JSON.parse(e):{
-            container_id:"",
-            created_at:"",
-            description:"vacío",
-            id:"-1337",
-            code:"",
-            image:"",
-            language:"",
-            name:"",
-            status:""
-        }
-    });
-
-    const [name, setName] = useState(editable.name || "");
-    const [code, setCode] = useState(editable.code || "");
-    const [language, setLanguage] = useState(editable.language || "rust");
-    const [description, setDescription] = useState(editable.description || "");
+    const [name, setName] = useState("");
+    const [code, setCode] = useState("");
+    const [language, setLanguage] = useState("flask");
 
     const [loading, setLoading] = useState(false);
 
-    const editOrCreateService = async () => {
+    const createService = async () => {
         setLoading(true);
 
-        const isEdit = editable && editable.id && editable.id !== "-1337";
-        console.log("editing?: ",isEdit)
         var success:boolean = false
 
         try {
-            if (isEdit) {
-                const body: ServiceUpdateForm = {
-                    code:code,
-                    description:description,
-                };
-
-                const response = await fetch(backendUrl+"/"+editable.id, {
-                    method: "PUT",
-                    body: JSON.stringify(body),
-                });
-
-                if (!response.ok) throw new Error(`PUT failed: ${response.statusText}`);
-            } else {
-                const body: ServiceCreateForm = {
-                    name:name,
-                    code:code,
-                    language:language,
-                    description:description,
-                };
-
-                const response = await fetch(backendUrl, {
-                    method: "POST",
-                    body: JSON.stringify(body),
-                });
-
-                if (!response.ok) throw new Error(`POST failed: ${response.statusText}`);
-            }
+            const body: ServiceCreateForm = {
+                name:name,
+                code:code,
+                language:language,
+                description:"",
+            };
+            const response = await fetch(backendUrl, {
+                method: "POST",
+                body: JSON.stringify(body),
+            });
+            
+            if (!response.ok) throw new Error(`POST failed: ${response.statusText}`);
+            
             localStorage.removeItem("editService");
             success = true
+
         } catch (error) {
-            console.error("Error creando/actualizando servicio:", error);
+            console.error("Error creando servicio:", error);
         } finally {
             setLoading(false);
             if(success){
@@ -89,7 +56,7 @@ export default function ServiceEditor(){
                     <div className='monitor-scanlines'>
                         <div className="monitor-content">
 
-                            <h1> \\ EDITAR O CREAR MICROSERVICIO </h1>
+                            <h1> \\ CREAR MICROSERVICIO </h1>
 
                             <p>Seleccionar lenguaje de programación, editar el código, enviar!!!</p>
                             <p>Recomendación: Pegar el código desde algún Sandbox en linea del lenguaje seleccionado.</p>
@@ -116,7 +83,7 @@ export default function ServiceEditor(){
                                     disabled={loading}
                                 />
                                 <div>
-                                    <button className='monitor-button' onClick={() => {editOrCreateService()}} disabled={loading}>
+                                    <button className='monitor-button' onClick={() => {createService()}} disabled={loading}>
                                         {loading ? "CARGANDO..." : "CONFIRMAR"}
                                     </button>
                                     <select
@@ -128,7 +95,7 @@ export default function ServiceEditor(){
                                         disabled={loading}
                                     >
                                         <option value="axum">Axum (Rust)</option>
-                                        <option value="flask">Flash (Python)</option>
+                                        <option value="flask">Flask (Python)</option>
                                         <option value="express">Express (JavaScript)</option>
                                         <option value="gin">Gin (GO)</option>
                                     </select>
