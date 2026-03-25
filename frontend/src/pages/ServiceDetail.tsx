@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Service, ServiceUpdateForm } from '../models/msm_models'
 import MonitorBackdrop from '../components/monitor';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -27,7 +27,7 @@ export function ServiceDetail(){
     const fetchDeets = async () => {
         const deetsReq = await fetch(backendUrl+"/"+serviceId)
         //espero que el backend me mande un Service con código definido
-        const service:Service = await deetsReq.json();  // toca estar atento a cambios del modelo
+        const service:Service = await deetsReq.json(); 
         setEditable(service);
 
     }
@@ -38,6 +38,8 @@ export function ServiceDetail(){
     }, []);
 
     const [loading, setLoading] = useState(false);
+    const [logs, setLogs] = useState<string[]>([]);
+    const esRef = useRef<EventSource | null>(null);
 
     const editService = async () => {
         setLoading(true);
@@ -69,6 +71,7 @@ export function ServiceDetail(){
     }
 
     const bootService = async () => {
+        //Prender/apagar dependiendo del status. Al prender, enganchar el EventSource
         setLoading(true);
         try{
             if (editable.status === "running"){
@@ -80,18 +83,41 @@ export function ServiceDetail(){
                 } else {
                     throw new Error("Algo salió mal apagando el contenedor:\n");
                 }
-            } else if (editable.status === "created" || editable.status === "stopped") {
-                const resp = await fetch(backendUrl+"/start/"+editable.id, {
-                    method:"PATCH"
-                });
-                if (resp.ok) {
-                    fetchDeets();
-                } else {
-                    throw new Error("Algo salió mal iniciando el contenedor:\n");
+            } else if (editable.status === "created" || editable.status === "stopped" || editable.status === "failed") {
+                //Cuando se encienda el microservicio, toca enganchar el SSE stream a esRef
+                if (esRef.current) {
+                    esRef.current.close();
+                    esRef.current = null;
                 }
+
+                const es = new EventSource(backendUrl+"/stream/"+editable.id);
+                esRef.current = es;
+
+                es.onmessage = (event) => {
+                     console.log("STREAM EVENT: ", event.data);
+                     setLogs((prevLogs) => [...prevLogs, event.data]);
+                }
+
+                //por si el server manda una señal de que se acabó el stream
+                es.addEventListener("done", () => {
+                  es.close();
+                  esRef.current = null;
+                  fetchDeets();
+                });
+                
+                es.onerror = (err) => {
+                  console.error("Stream error:", err);
+                  setLogs((prevLogs) => [...prevLogs, "ERROR"]);
+                  es.close();
+                  esRef.current = null;
+                  fetchDeets();
+                };
+
             }
         } catch (error) {
             console.error("Error: ", error);
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -121,11 +147,18 @@ export function ServiceDetail(){
                                 <textarea
                                     className="code-block"
                                     name="code"
-                                    placeholder="¡Copiar y pegar código aquí!"
+                                    placeholder="¡Copiar y pegar código aquí para actualizar el microservicio!"
                                     value={editable.code}
                                     onChange={(e) => setEditable({...editable, code:e.target.value})}
                                     required
                                     disabled={loading}
+                                />
+                                <textarea
+                                    className="code-block"
+                                    name="logs"
+                                    placeholder="Para encender los Logs, unda click en el boton de STATUS, abajo de este recuadro"
+                                    value={logs.join("\n")}
+                                    disabled={true}
                                 />
                                 <div>
                                     <button className='monitor-button' onClick={() => {editService()}} disabled={loading}>
