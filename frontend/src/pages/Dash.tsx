@@ -67,7 +67,7 @@ export function Dash() {
                                     <div key={service.id} className='monitor-item'>
                                         <div className='service-label'>
                                             <h3>{service.name}</h3>
-                                            <span>https://www.test.com.co/sumar-microservicio/pyth</span>
+                                            <span>{"http://localhost/services/"+service.name}</span>
                                         </div>
                                         <div className='monitor-item-buttons'>
                                             <button className='monitor-button'>{service.status}</button>

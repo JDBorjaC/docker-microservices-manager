@@ -74,16 +74,7 @@ export function ServiceDetail(){
         //Prender/apagar dependiendo del status. Al prender, enganchar el EventSource
         setLoading(true);
         try{
-            if (editable.status === "running"){
-                const resp = await fetch(backendUrl+"/stop/"+editable.id, {
-                    method:"PATCH"
-                });
-                if (resp.ok) {
-                    fetchDeets();
-                } else {
-                    throw new Error("Algo salió mal apagando el contenedor:\n");
-                }
-            } else if (editable.status === "created" || editable.status === "stopped" || editable.status === "failed") {
+             if (editable.status === "created" || editable.status === "stopped" || editable.status === "failed" || editable.status === "running") {
                 //Cuando se encienda el microservicio, toca enganchar el SSE stream a esRef
                 if (esRef.current) {
                     esRef.current.close();
@@ -93,31 +84,61 @@ export function ServiceDetail(){
                 const es = new EventSource(backendUrl+"/stream/"+editable.id);
                 esRef.current = es;
 
-                es.onmessage = (event) => {
-                     console.log("STREAM EVENT: ", event.data);
-                     setLogs((prevLogs) => [...prevLogs, event.data]);
-                }
-
-                //por si el server manda una señal de que se acabó el stream
-                es.addEventListener("done", () => {
-                  es.close();
-                  esRef.current = null;
-                  fetchDeets();
+                //Se añade un listener por cada tipo de mensaje que se espera del backend
+                es.addEventListener("info", (e: MessageEvent) => {
+                    setLogs(prev => [...prev, "[INFO] "+e.data]);
+                    fetchDeets();
                 });
-                
-                es.onerror = (err) => {
-                  console.error("Stream error:", err);
-                  setLogs((prevLogs) => [...prevLogs, "ERROR"]);
-                  es.close();
-                  esRef.current = null;
-                  fetchDeets();
+                es.addEventListener("log", (e: MessageEvent) => {
+                    setLogs(prev => [...prev, e.data]);
+                    fetchDeets();
+                });
+                es.addEventListener("error", (e: MessageEvent) => {
+                    setLogs(prev => [...prev, "[ERROR] "+e.data]);
+                    fetchDeets();
+                });
+            
+                //abortar en caso de done o de error
+                es.addEventListener("done", () => {
+                    es.close();
+                    esRef.current = null;
+                    setLogs(prev => [...prev, "[SESSION TERMINATED] "]);
+                    fetchDeets();
+                });
+                es.onerror = () => {
+                    es.close();
+                    esRef.current = null;
+                    setLogs(prev => [...prev, "[SESSION ERROR] "]);
+                    fetchDeets();
                 };
 
             }
         } catch (error) {
-            console.error("Error: ", error);
+            //error de parte del frontend
+            console.error("Error hookeando el EventSource: ", error);
         } finally {
             setLoading(false);
+        }
+    }
+
+    const shutService = async () => {
+        if (editable.status === "running"){
+            setLoading(true);
+            try{
+                const resp = await fetch(backendUrl+"/stop/"+editable.id, {
+                    method:"PATCH"
+                });
+                if (resp.ok) {
+                    setLoading(false);
+                } else {
+                    throw new Error("Algo salió mal apagando el contenedor:\n");
+                }
+            } catch(err) {
+                setLoading(false);
+                console.error("Error apagando el Contenedor: ", err);
+            } finally {
+                fetchDeets();
+            }
         }
     }
 
@@ -144,6 +165,14 @@ export function ServiceDetail(){
                                     value={editable.name}
                                     disabled={true}
                                 />
+                                <input
+                                    className="code-input"
+                                    type="text"
+                                    name="url"
+                                    placeholder="Enlace al microservicio"
+                                    value={"ENLACE AL MICROSERVICIO: http://localhost/services/"+editable.name}
+                                    disabled={true}
+                                />
                                 <textarea
                                     className="code-block"
                                     name="code"
@@ -166,6 +195,9 @@ export function ServiceDetail(){
                                     </button>
                                     <button className='monitor-button' onClick={() => {bootService()}} disabled={loading}>
                                         {loading ? "..." : "STATUS: "+editable.status}
+                                    </button>
+                                    <button className='monitor-button' onClick={() => {shutService()}} disabled={loading}>
+                                        {loading ? "..." : "APAGAR CONTENEDOR"}
                                     </button>
                                     <select
                                         className="drop-down-menu"
