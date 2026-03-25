@@ -171,7 +171,7 @@ func (h *Handler) StreamMicroserviceLogs(c *gin.Context) {
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintf(c.Writer, "event: error\ndata: Error leyendo logs: %s\n\n", err.Error())
 	} else {
-		fmt.Fprintf(c.Writer, "event: info\ndata: Stream finalizado.\n\n")
+		fmt.Fprintf(c.Writer, "event: done\ndata: Stream finalizado.\n\n")
 	}
 	flusher.Flush()
 }
@@ -205,7 +205,7 @@ func (h *Handler) StopMicroservice(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error: " + err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "microservice stopped"})
+	c.JSON(http.StatusOK, gin.H{"message": "stop signal sent"})
 }
 
 // UpdateMicroservice godoc
