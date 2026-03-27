@@ -3,10 +3,14 @@ package internal
 import "time"
 
 const (
-	StatusCreated = "created"
-	StatusRunning = "running"
-	StatusFailed  = "failed"
-	StatusStopped = "stopped"
+	ContainerCreated    = "created"
+	ContainerRunning    = "running"
+	ContainerPaused     = "paused"
+	ContainerRestarting = "restarting"
+	ContainerRemoving   = "removing"
+	ContainerExited     = "exited"
+	ContainerCrashed    = "crashed"
+	ContainerDead       = "dead"
 
 	LangFlask   = "flask"
 	LangExpress = "express"
@@ -22,5 +26,6 @@ type Microservice struct {
 	Image       string    `json:"image" example:"msm-api-users:latest"`
 	ContainerId string    `json:"container_id" example:"a1b2c3d4e5f6"`
 	Status      string    `json:"status" example:"running"`
+	Code        string    `json:"code" example:"def hello(): return 'Hello World'"`
 	CreatedAt   time.Time `json:"created_at" example:"2025-01-01T15:04:05Z"`
 }

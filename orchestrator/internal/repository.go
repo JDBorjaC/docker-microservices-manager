@@ -43,6 +43,7 @@ func (r *Repository) Init() error {
         image TEXT,
         container_id TEXT,
         status TEXT DEFAULT 'created',
+		code TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     `)
@@ -54,8 +55,8 @@ func (r *Repository) Init() error {
 }
 
 func (r *Repository) InsertMicroservice(ms *Microservice) error {
-	query := `INSERT INTO microservice (name, description, language, image, container_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
-	result, err := r.db.Exec(query, ms.Name, ms.Description, ms.Language, ms.Image, ms.ContainerId, ms.Status, ms.CreatedAt)
+	query := `INSERT INTO microservice (name, description, language, image, container_id, status, code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	result, err := r.db.Exec(query, ms.Name, ms.Description, ms.Language, ms.Image, ms.ContainerId, ms.Status, ms.Code, ms.CreatedAt)
 	if err != nil {
 		return err
 	}
@@ -90,7 +91,7 @@ func (r *Repository) GetAllMicroservices() ([]Microservice, error) {
 
 var allowedColumns = map[string]bool{
 	"id": true, "name": true, "container_id": true, "status": true,
-	"description": true, "image": true, "language": true,
+	"description": true, "image": true, "language": true, "code": true,
 }
 
 func (r *Repository) GetMicroserviceBy(column string, value any) (*Microservice, error) {
@@ -101,10 +102,10 @@ func (r *Repository) GetMicroserviceBy(column string, value any) (*Microservice,
 	var ms Microservice
 	var containerId sql.NullString
 	query := fmt.Sprintf(
-		`SELECT id, name, description, language, image, container_id, status, created_at FROM microservice WHERE %s = ?`, column,
+		`SELECT id, name, description, language, image, container_id, status, code, created_at FROM microservice WHERE %s = ?`, column,
 	)
 	err := r.db.QueryRow(query, value).Scan(
-		&ms.Id, &ms.Name, &ms.Description, &ms.Language, &ms.Image, &containerId, &ms.Status, &ms.CreatedAt,
+		&ms.Id, &ms.Name, &ms.Description, &ms.Language, &ms.Image, &containerId, &ms.Status, &ms.Code, &ms.CreatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -116,7 +117,7 @@ func (r *Repository) GetMicroserviceBy(column string, value any) (*Microservice,
 	return &ms, nil
 }
 
-// UpdateMicroservice updates multiple allowed columns for a given microservice ID in a single query.
+// Updates multiple allowed columns for a given microservice ID in a single query.
 func (r *Repository) UpdateMicroservice(id int, updates map[string]any) error {
 	if len(updates) == 0 {
 		return fmt.Errorf("no updates provided")
