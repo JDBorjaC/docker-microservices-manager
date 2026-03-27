@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -16,10 +17,17 @@ import (
 type Service struct {
 	client *DockerClient
 	repo   *Repository
+
+	statusListeners   map[chan Microservice]struct{}
+	statusListenersMu sync.RWMutex
 }
 
 func NewService(client *DockerClient, repo *Repository) *Service {
-	return &Service{client: client, repo: repo}
+	return &Service{
+		client:          client,
+		repo:            repo,
+		statusListeners: make(map[chan Microservice]struct{}),
+	}
 }
 
 type langConfig struct {
@@ -155,6 +163,18 @@ func (s *Service) StartAndStreamMicroservice(ctx context.Context, id int, contai
 	return s.client.LogMicroservice(ctx, containerId, true)
 
 	//If the container is successfuly started, leave the status update to the reconciliation loop
+}
+
+func (s *Service) StartMicroservice(ctx context.Context, id int) error {
+	ms, err := s.repo.GetMicroserviceBy("id", id)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return ErrNotFound
+	}
+
+	return s.client.StartMicroservice(ctx, ms.ContainerId)
 }
 
 func (s *Service) GetAllMicroservices() ([]Microservice, error) {
@@ -365,6 +385,8 @@ func (s *Service) StartReconciliationLoop(ctx context.Context) {
 			s.repo.UpdateMicroservice(ms.Id, map[string]any{
 				"status": ContainerRunning,
 			})
+			ms.Status = ContainerRunning
+			s.broadcastStatus(*ms)
 		},
 		OnContainerDie: func(containerID string) {
 			ms, _ := s.repo.GetMicroserviceBy("container_id", containerID)
@@ -382,6 +404,8 @@ func (s *Service) StartReconciliationLoop(ctx context.Context) {
 			s.repo.UpdateMicroservice(ms.Id, map[string]any{
 				"status": newStatus,
 			})
+			ms.Status = newStatus
+			s.broadcastStatus(*ms)
 		},
 		OnContainerDestroy: func(containerID string) {
 			ms, err := s.repo.GetMicroserviceBy("container_id", containerID)
@@ -418,5 +442,36 @@ func (s *Service) mapDockerStateToInternal(state *types.ContainerState) string {
 		return ContainerDead
 	default:
 		return ContainerCrashed
+	}
+}
+
+// Subscription logic for real-time status updates
+func (s *Service) SubscribeStatus() chan Microservice {
+	s.statusListenersMu.Lock()
+	defer s.statusListenersMu.Unlock()
+
+	ch := make(chan Microservice, 10)
+	s.statusListeners[ch] = struct{}{}
+	return ch
+}
+
+func (s *Service) UnsubscribeStatus(ch chan Microservice) {
+	s.statusListenersMu.Lock()
+	defer s.statusListenersMu.Unlock()
+
+	delete(s.statusListeners, ch)
+	close(ch)
+}
+
+func (s *Service) broadcastStatus(ms Microservice) {
+	s.statusListenersMu.RLock()
+	defer s.statusListenersMu.RUnlock()
+
+	for ch := range s.statusListeners {
+		select {
+		case ch <- ms:
+		default:
+			// Buffer full, skip this update for this listener to avoid blocking
+		}
 	}
 }

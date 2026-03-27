@@ -148,6 +148,7 @@ func (d *DockerClient) LogMicroservice(ctx context.Context, id string, follow bo
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     follow,
+		Tail:       "25",
 	})
 	if err != nil {
 		if errdefs.IsNotFound(err) {

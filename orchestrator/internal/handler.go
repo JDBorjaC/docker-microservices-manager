@@ -2,10 +2,12 @@ package internal
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -120,30 +122,29 @@ func (h *Handler) GetMicroserviceByID(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /microservices/stream/{id} [get]
 func (h *Handler) StreamMicroserviceLogs(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "id must be an integer"})
-		return
-	}
-
-	//Verificar la integridad del id en el repositorio
-	containerId, err := h.service.ValidateMicroserviceContainerID(id)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.Writer.Header().Set("Content-Type", "text/event-stream") //SSE header
-	c.Writer.Header().Set("Cache-Control", "no-cache")         //Avoid caching old data
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
-
-	//I'm thinking this should be set in middleware (CORS)
-	//c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+	c.Writer.Header().Set("X-Accel-Buffering", "no") // Bypass proxy buffering (Nginx/Traefik)
 
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Streaming unsupported"})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		fmt.Fprintf(c.Writer, "event: error\ndata: id must be an integer\n\n")
+		flusher.Flush()
+		return
+	}
+
+	containerId, err := h.service.ValidateMicroserviceContainerID(id)
+	if err != nil {
+		fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", err.Error())
+		flusher.Flush()
 		return
 	}
 
@@ -162,18 +163,43 @@ func (h *Handler) StreamMicroserviceLogs(c *gin.Context) {
 	flusher.Flush()
 
 	scanner := bufio.NewScanner(stream)
-	for scanner.Scan() {
-		text := scanner.Text()
-		fmt.Fprintf(c.Writer, "event: log\ndata: %s\n\n", text)
-		flusher.Flush()
-	}
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
 
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(c.Writer, "event: error\ndata: Error leyendo logs: %s\n\n", err.Error())
-	} else {
-		fmt.Fprintf(c.Writer, "event: done\ndata: Stream finalizado.\n\n")
+	logChan := make(chan string)
+	errChan := make(chan error)
+
+	go func() {
+		for scanner.Scan() {
+			logChan <- scanner.Text()
+		}
+		errChan <- scanner.Err()
+	}()
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.Request.Context().Done():
+			return
+		case <-ticker.C:
+			// Enviar un comentario de keep-alive para evitar que los proxies cierren la conexión
+			fmt.Fprintf(c.Writer, ": keep-alive\n\n")
+			flusher.Flush()
+		case text := <-logChan:
+			fmt.Fprintf(c.Writer, "event: log\ndata: %s\n\n", text)
+			flusher.Flush()
+		case err := <-errChan:
+			if err != nil {
+				fmt.Fprintf(c.Writer, "event: error\ndata: Error leyendo logs: %v\n\n", err)
+			} else {
+				fmt.Fprintf(c.Writer, "event: done\ndata: Stream finalizado.\n\n")
+			}
+			flusher.Flush()
+			return
+		}
 	}
-	flusher.Flush()
 }
 
 // StopMicroservice godoc
@@ -206,6 +232,89 @@ func (h *Handler) StopMicroservice(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "stop signal sent"})
+}
+
+// StartMicroservice godoc
+// @Summary Start a microservice container
+// @Description Starts a stopped microservice container and updates its status in the db.
+// @Tags microservices
+// @Produce json
+// @Param id path int true "Microservice Internal ID"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /microservices/start/{id} [patch]
+func (h *Handler) StartMicroservice(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id must be an integer"})
+		return
+	}
+
+	err = h.service.StartMicroservice(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "start signal sent"})
+}
+
+// StreamStatusUpdates godoc
+// @Summary Stream all microservice status updates via SSE
+// @Description Real-time stream of status changes for all managed microservices.
+// @Tags microservices
+// @Produce text/event-stream
+// @Success 200 {string} string "SSE Stream of status updates"
+// @Router /microservices/status/events [get]
+func (h *Handler) StreamStatusUpdates(c *gin.Context) {
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Streaming unsupported"})
+		return
+	}
+
+	subChan := h.service.SubscribeStatus()
+	defer h.service.UnsubscribeStatus(subChan)
+
+	// Context for client disconnection
+	clientCtx := c.Request.Context()
+
+	// Notify connection established
+	fmt.Fprintf(c.Writer, "event: info\ndata: Connected to status stream\n\n")
+	flusher.Flush()
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case ms, ok := <-subChan:
+			if !ok {
+				return
+			}
+			data, _ := json.Marshal(ms)
+			fmt.Fprintf(c.Writer, "event: status_update\ndata: %s\n\n", string(data))
+			flusher.Flush()
+		case <-ticker.C:
+			// Enviar keep-alive comment
+			fmt.Fprintf(c.Writer, ": keep-alive\n\n")
+			flusher.Flush()
+		case <-clientCtx.Done():
+			return
+		}
+	}
 }
 
 // UpdateMicroservice godoc
