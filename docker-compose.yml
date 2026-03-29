@@ -49,7 +49,7 @@ services:
       #Give container access to the host's Docker daemon.
       - /var/run/docker.sock:/var/run/docker.sock
       #Persist SQLite database
-      - ./orchestrator/data.db:/usr/src/app/data.db
+      - ./orchestrator/storage:/usr/src/app/storage
     networks:
       - msm-network
 

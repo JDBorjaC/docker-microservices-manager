@@ -2,6 +2,8 @@ FROM golang:1.25.6
 
 WORKDIR /usr/src/app
 
+RUN mkdir -p /usr/src/app/storage
+
 #pre-copy/cache go.mod for pre-downloading dependencies and only redownloading them in subsequent builds if they change
 COPY go.mod go.sum ./
 RUN go mod download
