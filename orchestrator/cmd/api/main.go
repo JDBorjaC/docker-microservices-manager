@@ -47,10 +47,12 @@ func main() {
 
 	r.POST("/microservices", handler.CreateMicroservice)
 	r.GET("/microservices", handler.GetMicroservices)
-	r.GET("microservices/:id", handler.GetMicroserviceByID)
+	r.GET("/microservices/:id", handler.GetMicroserviceByID)
 	r.GET("/microservices/stream/:id", handler.StreamMicroserviceLogs)
 	r.PUT("/microservices/:id", handler.UpdateMicroservice)
 	r.PATCH("/microservices/stop/:id", handler.StopMicroservice)
+	r.PATCH("/microservices/start/:id", handler.StartMicroservice)
+	r.GET("/microservices/status/events", handler.StreamStatusUpdates)
 	r.DELETE("/microservices/:id", handler.DeleteMicroservice)
 	r.DELETE("/microservices", handler.DeleteAllMicroservices)
 

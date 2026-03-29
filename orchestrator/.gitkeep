@@ -1,0 +1,2 @@
+mkdir -p ./storage
+touch ./storage/.gitkeep

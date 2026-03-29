@@ -11,8 +11,11 @@ import (
 	"path/filepath"
 
 	"github.com/containerd/errdefs"
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/client"
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/client"
 )
 
 type DockerClient struct {
@@ -20,7 +23,7 @@ type DockerClient struct {
 }
 
 func NewDockerClient() (*DockerClient, error) {
-	apiClient, err := client.New(client.FromEnv)
+	apiClient, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +76,7 @@ func (d *DockerClient) BuildImage(ctx context.Context, dir string, imageName str
 	}
 	tw.Close()
 
-	resp, err := d.client.ImageBuild(ctx, buf, client.ImageBuildOptions{
+	resp, err := d.client.ImageBuild(ctx, buf, types.ImageBuildOptions{
 		Tags:        []string{imageName},
 		Remove:      true,
 		ForceRemove: true,
@@ -93,7 +96,7 @@ func (d *DockerClient) BuildImage(ctx context.Context, dir string, imageName str
 			}
 			return fmt.Errorf("error decoding build stream: %w", err)
 		}
-		
+
 		// If Docker daemon reports an error during build (e.g. missing base image), it comes here
 		if errorMsg, ok := msg["error"]; ok {
 			return fmt.Errorf("docker build failed: %v", errorMsg)
@@ -103,26 +106,25 @@ func (d *DockerClient) BuildImage(ctx context.Context, dir string, imageName str
 	return nil
 }
 
-func (d *DockerClient) CreateMicroservice(ctx context.Context, ms Microservice, port string) (*client.ContainerCreateResult, error) {
-
-	resp, err := d.client.ContainerCreate(ctx, client.ContainerCreateOptions{
+func (d *DockerClient) CreateMicroservice(ctx context.Context, ms Microservice, port string) (*container.CreateResponse, error) {
+	config := &container.Config{
+		Tty: true,
+		Labels: map[string]string{
+			"traefik.enable": "true",
+			"traefik.http.routers." + ms.Name + ".rule":                           "PathPrefix(`/services/" + ms.Name + "`)",
+			"traefik.http.routers." + ms.Name + ".priority":                       "10",
+			"traefik.http.services." + ms.Name + ".loadbalancer.server.port":      port,
+			"traefik.http.middlewares." + ms.Name + "-strip.stripprefix.prefixes": "/services/" + ms.Name,
+			"traefik.http.routers." + ms.Name + ".middlewares":                    ms.Name + "-strip",
+		},
 		Image: ms.Image,
-		Name:  ms.Name,
-		HostConfig: &container.HostConfig{
-			NetworkMode: "msm-network",
-		},
-		Config: &container.Config{
-			Tty: true,
-			Labels: map[string]string{
-				"traefik.enable": "true",
-				"traefik.http.routers." + ms.Name + ".rule":                           "PathPrefix(`/services/" + ms.Name + "`)",
-				"traefik.http.routers." + ms.Name + ".priority":                       "10",
-				"traefik.http.services." + ms.Name + ".loadbalancer.server.port":      port,
-				"traefik.http.middlewares." + ms.Name + "-strip.stripprefix.prefixes": "/services/" + ms.Name,
-				"traefik.http.routers." + ms.Name + ".middlewares":                    ms.Name + "-strip",
-			},
-		},
-	})
+	}
+
+	hostConfig := &container.HostConfig{
+		NetworkMode: "msm-network",
+	}
+
+	resp, err := d.client.ContainerCreate(ctx, config, hostConfig, nil, nil, ms.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +133,7 @@ func (d *DockerClient) CreateMicroservice(ctx context.Context, ms Microservice, 
 }
 
 func (d *DockerClient) StartMicroservice(ctx context.Context, id string) error {
-	_, err := d.client.ContainerStart(ctx, id, client.ContainerStartOptions{})
+	err := d.client.ContainerStart(ctx, id, container.StartOptions{})
 	if err != nil {
 		if errdefs.IsNotFound(err) {
 			return fmt.Errorf("%w: container with id %s", ErrNotFound, id)
@@ -142,10 +144,11 @@ func (d *DockerClient) StartMicroservice(ctx context.Context, id string) error {
 }
 
 func (d *DockerClient) LogMicroservice(ctx context.Context, id string, follow bool) (io.ReadCloser, error) {
-	out, err := d.client.ContainerLogs(ctx, id, client.ContainerLogsOptions{
+	out, err := d.client.ContainerLogs(ctx, id, container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     follow,
+		Tail:       "25",
 	})
 	if err != nil {
 		if errdefs.IsNotFound(err) {
@@ -158,7 +161,7 @@ func (d *DockerClient) LogMicroservice(ctx context.Context, id string, follow bo
 }
 
 func (d *DockerClient) StopMicroservice(ctx context.Context, id string) error {
-	_, err := d.client.ContainerStop(ctx, id, client.ContainerStopOptions{})
+	err := d.client.ContainerStop(ctx, id, container.StopOptions{})
 	if err != nil {
 		if errdefs.IsNotFound(err) {
 			return fmt.Errorf("%w: container with id %s", ErrNotFound, id)
@@ -169,7 +172,7 @@ func (d *DockerClient) StopMicroservice(ctx context.Context, id string) error {
 }
 
 func (d *DockerClient) RemoveMicroservice(ctx context.Context, id string) error {
-	_, err := d.client.ContainerRemove(ctx, id, client.ContainerRemoveOptions{
+	err := d.client.ContainerRemove(ctx, id, container.RemoveOptions{
 		RemoveVolumes: true,
 		Force:         true,
 	})
@@ -184,7 +187,7 @@ func (d *DockerClient) RemoveMicroservice(ctx context.Context, id string) error 
 
 // RemoveImage deletes a Docker image by name/tag.
 func (d *DockerClient) RemoveImage(ctx context.Context, imageName string) error {
-	_, err := d.client.ImageRemove(ctx, imageName, client.ImageRemoveOptions{Force: true, PruneChildren: true})
+	_, err := d.client.ImageRemove(ctx, imageName, image.RemoveOptions{Force: true, PruneChildren: true})
 	if err != nil {
 		if errdefs.IsNotFound(err) {
 			return nil // Already gone, no problem
@@ -194,34 +197,55 @@ func (d *DockerClient) RemoveImage(ctx context.Context, imageName string) error 
 	return nil
 }
 
-func (d *DockerClient) IsContainerRunning(ctx context.Context, id string) (bool, error) {
-	result, err := d.client.ContainerList(ctx, client.ContainerListOptions{All: true})
+func (d *DockerClient) GetContainerState(ctx context.Context, id string) (*types.ContainerState, error) {
+	containerInspectResult, err := d.client.ContainerInspect(ctx, id)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-
-	for _, c := range result.Items {
-		if c.ID == id || (len(id) >= 12 && len(c.ID) >= len(id) && c.ID[:len(id)] == id) {
-			return c.State == "running", nil
-		}
-	}
-
-	return false, nil
+	return containerInspectResult.State, nil
 }
 
-func (d *DockerClient) WatchContainerEvents(ctx context.Context, onContainerDie func(containerID string)) {
-	res := d.client.Events(ctx, client.EventsListOptions{})
+type ContainerEventHandler struct {
+	OnContainerStart   func(containerID string)
+	OnContainerDie     func(containerID string)
+	OnContainerDestroy func(containerID string)
+}
+
+func (d *DockerClient) WatchContainerEvents(
+	ctx context.Context,
+	eventHandler ContainerEventHandler,
+) {
+	res, errs := d.client.Events(ctx, types.EventsOptions{
+		Filters: filters.NewArgs(
+			filters.Arg("type", "container"),
+		),
+	})
 
 	go func() {
 		for {
 			select {
-			case err := <-res.Err:
-				fmt.Printf("Error listener docker eventos: %v\n", err)
-				return
-			case msg := <-res.Messages:
-				if msg.Type == "container" && (msg.Action == "die" || msg.Action == "destroy") {
-					onContainerDie(msg.Actor.ID)
+			case err, ok := <-errs:
+				if !ok {
+					return
 				}
+				if err != nil {
+					fmt.Printf("Error listener docker eventos: %v\n", err)
+				}
+
+			case msg, ok := <-res:
+				if !ok {
+					return
+				}
+
+				switch msg.Action {
+				case "start":
+					eventHandler.OnContainerStart(msg.Actor.ID)
+				case "die":
+					eventHandler.OnContainerDie(msg.Actor.ID)
+				case "destroy":
+					eventHandler.OnContainerDestroy(msg.Actor.ID)
+				}
+
 			case <-ctx.Done():
 				return
 			}

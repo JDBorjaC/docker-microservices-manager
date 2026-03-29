@@ -8,16 +8,26 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/docker/docker/api/types"
 )
 
 type Service struct {
 	client *DockerClient
 	repo   *Repository
+
+	statusListeners   map[chan Microservice]struct{}
+	statusListenersMu sync.RWMutex
 }
 
 func NewService(client *DockerClient, repo *Repository) *Service {
-	return &Service{client: client, repo: repo}
+	return &Service{
+		client:          client,
+		repo:            repo,
+		statusListeners: make(map[chan Microservice]struct{}),
+	}
 }
 
 type langConfig struct {
@@ -116,7 +126,8 @@ func (s *Service) CreateMicroservice(ctx context.Context, req CreateMicroservice
 		Description: req.Description,
 		Language:    req.Language,
 		Image:       customImageName,
-		Status:      StatusCreated,
+		Status:      ContainerCreated,
+		Code:        req.Code,
 		CreatedAt:   time.Now(),
 	}
 
@@ -146,15 +157,24 @@ func (s *Service) StartAndStreamMicroservice(ctx context.Context, id int, contai
 	//Start Container
 	err := s.client.StartMicroservice(ctx, containerId)
 	if err != nil {
-		s.repo.UpdateMicroservice(id, map[string]any{"status": StatusFailed})
 		return nil, err
 	}
-
-	//Update Status to Running
-	s.repo.UpdateMicroservice(id, map[string]any{"status": StatusRunning})
-
 	//Stream Logs
 	return s.client.LogMicroservice(ctx, containerId, true)
+
+	//If the container is successfuly started, leave the status update to the reconciliation loop
+}
+
+func (s *Service) StartMicroservice(ctx context.Context, id int) error {
+	ms, err := s.repo.GetMicroserviceBy("id", id)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return ErrNotFound
+	}
+
+	return s.client.StartMicroservice(ctx, ms.ContainerId)
 }
 
 func (s *Service) GetAllMicroservices() ([]Microservice, error) {
@@ -183,7 +203,8 @@ func (s *Service) StopMicroservice(ctx context.Context, id int) error {
 		return err
 	}
 
-	return s.repo.UpdateMicroservice(id, map[string]any{"status": StatusStopped})
+	return nil
+	//Reconciliation Loop handles status update!!!
 }
 
 func (s *Service) ValidateMicroserviceContainerID(id int) (string, error) {
@@ -195,45 +216,6 @@ func (s *Service) ValidateMicroserviceContainerID(id int) (string, error) {
 		return "", ErrNotFound
 	}
 	return ms.ContainerId, nil
-}
-
-func (s *Service) SyncStateOnStartup(ctx context.Context) error {
-	microservices, err := s.repo.GetAllMicroservices()
-	if err != nil {
-		return err
-	}
-
-	for _, ms := range microservices {
-		if ms.Status == StatusCreated || ms.Status == StatusRunning {
-			if ms.ContainerId == "" {
-				continue
-			}
-			running, err := s.client.IsContainerRunning(ctx, ms.ContainerId)
-			if err != nil {
-				fmt.Printf("Error verificando contenedor %s: %v\n", ms.Name, err)
-				continue
-			}
-			if !running {
-				fmt.Printf("Sync: Microservicio %s no estaba corriendo.\n", ms.Name)
-				s.repo.UpdateMicroservice(ms.Id, map[string]any{"status": StatusFailed})
-			}
-		}
-	}
-	return nil
-}
-
-func (s *Service) StartReconciliationLoop(ctx context.Context) {
-	s.client.WatchContainerEvents(ctx, func(containerID string) {
-		ms, err := s.repo.GetMicroserviceBy("container_id", containerID)
-		if err != nil || ms == nil {
-			return // Pertenece a otro proceso ajeno
-		}
-
-		if ms.Status == StatusRunning || ms.Status == StatusCreated {
-			fmt.Printf("Reconciliación Activa: Detectado crash en %s. Marcando como failed.\n", ms.Name)
-			s.repo.UpdateMicroservice(ms.Id, map[string]any{"status": StatusFailed})
-		}
-	})
 }
 
 func (s *Service) RemoveMicroservice(ctx context.Context, id int) error {
@@ -344,7 +326,7 @@ func (s *Service) UpdateMicroservice(ctx context.Context, id int, req UpdateMicr
 
 	// Create new container
 	ms.Image = customImageName
-	ms.Status = StatusCreated
+	ms.Status = ContainerCreated
 	result, err := s.client.CreateMicroservice(ctx, *ms, lang.InternalPort)
 	if err != nil {
 		s.client.RemoveImage(context.Background(), customImageName)
@@ -356,11 +338,140 @@ func (s *Service) UpdateMicroservice(ctx context.Context, id int, req UpdateMicr
 	updates := map[string]any{
 		"container_id": ms.ContainerId,
 		"image":        ms.Image,
-		"status":       StatusCreated,
+		"status":       ContainerCreated,
+		"code":         codeToInject,
 	}
 	if err := s.repo.UpdateMicroservice(id, updates); err != nil {
 		return nil, err
 	}
 
 	return ms, nil
+}
+
+/*
+SYNCHRONIZATION OF THE ORCHESTRATOR WITH THE ACTUAL STATE OF THE CONTAINERS
+*/
+
+func (s *Service) SyncStateOnStartup(ctx context.Context) error {
+	microservices, err := s.repo.GetAllMicroservices()
+	if err != nil {
+		return err
+	}
+
+	for _, ms := range microservices {
+		if ms.ContainerId == "" {
+			continue
+		}
+		state, err := s.client.GetContainerState(ctx, ms.ContainerId)
+		if err != nil {
+			fmt.Printf("Error verificando contenedor %s: %v\n", ms.Name, err)
+			continue
+		}
+		internalState := s.mapDockerStateToInternal(state)
+		if internalState != ms.Status {
+			s.repo.UpdateMicroservice(ms.Id, map[string]any{"status": internalState})
+		}
+	}
+	return nil
+}
+
+func (s *Service) StartReconciliationLoop(ctx context.Context) {
+	eventHandler := ContainerEventHandler{
+		OnContainerStart: func(containerID string) {
+			ms, err := s.repo.GetMicroserviceBy("container_id", containerID)
+			if err != nil || ms == nil {
+				return
+			}
+			s.repo.UpdateMicroservice(ms.Id, map[string]any{
+				"status": ContainerRunning,
+			})
+			ms.Status = ContainerRunning
+			s.broadcastStatus(*ms)
+		},
+		OnContainerDie: func(containerID string) {
+			ms, _ := s.repo.GetMicroserviceBy("container_id", containerID)
+			if ms == nil {
+				return
+			}
+
+			state, err := s.client.GetContainerState(ctx, containerID)
+			if err != nil {
+				return
+			}
+
+			newStatus := s.mapDockerStateToInternal(state)
+
+			s.repo.UpdateMicroservice(ms.Id, map[string]any{
+				"status": newStatus,
+			})
+			ms.Status = newStatus
+			s.broadcastStatus(*ms)
+		},
+		OnContainerDestroy: func(containerID string) {
+			ms, err := s.repo.GetMicroserviceBy("container_id", containerID)
+			if err != nil || ms == nil {
+				return
+			}
+			s.RemoveMicroservice(context.Background(), ms.Id)
+		},
+	}
+
+	s.client.WatchContainerEvents(ctx, eventHandler)
+}
+
+func (s *Service) mapDockerStateToInternal(state *types.ContainerState) string {
+	if state.Status == "exited" {
+		if state.ExitCode == 0 {
+			return ContainerExited
+		} else {
+			return ContainerCrashed
+		}
+	}
+	switch state.Status {
+	case "created":
+		return ContainerCreated
+	case "running":
+		return ContainerRunning
+	case "paused":
+		return ContainerPaused
+	case "restarting":
+		return ContainerRestarting
+	case "removing":
+		return ContainerRemoving
+	case "dead":
+		return ContainerDead
+	default:
+		return ContainerCrashed
+	}
+}
+
+// Subscription logic for real-time status updates
+func (s *Service) SubscribeStatus() chan Microservice {
+	s.statusListenersMu.Lock()
+	defer s.statusListenersMu.Unlock()
+
+	ch := make(chan Microservice, 10)
+	s.statusListeners[ch] = struct{}{}
+	return ch
+}
+
+func (s *Service) UnsubscribeStatus(ch chan Microservice) {
+	s.statusListenersMu.Lock()
+	defer s.statusListenersMu.Unlock()
+
+	delete(s.statusListeners, ch)
+	close(ch)
+}
+
+func (s *Service) broadcastStatus(ms Microservice) {
+	s.statusListenersMu.RLock()
+	defer s.statusListenersMu.RUnlock()
+
+	for ch := range s.statusListeners {
+		select {
+		case ch <- ms:
+		default:
+			// Buffer full, skip this update for this listener to avoid blocking
+		}
+	}
 }
