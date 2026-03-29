@@ -4,6 +4,10 @@
 
 **Docker Microservices Manager**
 -
+Docker Microservices Manager es una plataforma de orquestación ligera tipo PaaS (Platform as a Service) diseñada para simplificar la creación, el despliegue y la gestión del ciclo de vida de microservicios. A través de una interfaz de usuario, permite a los desarrolladores escribir lógica en múltiples lenguajes de programación y generar contenedores Docker auto-enrutados en tiempo real de manera aislada, sin tener que configurar infraestructuras complejas.
+
+**Arquitectura Técnica**
+-
  Aquí encontrará información sobre los detalles técnicos de todos los módulos que conforman la arquitectura de este proyecto.
  
  **Módulos del Sistema**
