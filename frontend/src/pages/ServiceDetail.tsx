@@ -34,22 +34,63 @@ export function ServiceDetail() {
 
     //ON PAGELOAD: fetch service info and subscribe to status updates
     useEffect((): () => void => {
-        fetchDeets()
+        // Referencias mutables para poder limpiarlas
+        let es: EventSource | null = null;
+        let retryTimeout: ReturnType<typeof setTimeout> | null = null;
 
-        const es = new EventSource("http://localhost:8080/microservices/status/events");
-        es.addEventListener("status_update", (e: MessageEvent) => {
-            const updatedMs: Service = JSON.parse(e.data);
-            if (String(updatedMs.id) === String(serviceId)) {
-                setEditable(updatedMs);
-            }
-        });
-        es.onerror = (e) => {
-            console.error("SSE Status Error in ServiceDetail:", e, "ReadyState:", es.readyState);
+        // Estado del backoff entre intentos de reconexion
+        let retryDelay = 1000;
+        const MAX_DELAY = 30_000;
+
+        // flag que impide reconectar si el componente ya fue desmontado.
+        let destroyed = false;
+
+        const connect = () => {
+            if (destroyed) return;
+
+            es = new EventSource("http://localhost:8080/microservices/status/events");
+
+            // Resetear backoff
+            es.onopen = () => {
+                retryDelay = 1000;
+                fetchDeets();
+            };
+
+            // Actualizar estado del microservicio
+            es.addEventListener("status_update", (e: MessageEvent) => {
+                const updatedMs: Service = JSON.parse(e.data);
+                if (String(updatedMs.id) === String(serviceId)) {
+                    setEditable(updatedMs);
+                }
+            });
+
+            es.onerror = () => {
+                // Cierre explicito para tomar control total de la reconexion
+                es?.close();
+                es = null;
+
+                if (destroyed) return;
+
+                // Jitter del ±20% porque... cosas
+                const jitter = retryDelay * 0.2 * (Math.random() * 2 - 1);
+                const delay = retryDelay + jitter;
+
+                retryTimeout = setTimeout(() => {
+                    // Backoff exponencial: cada fallo duplica el tiempo de espera hasta el tope de 30s.
+                    retryDelay = Math.min(retryDelay * 2, MAX_DELAY);
+                    connect();
+                }, delay);
+            };
         };
 
+        connect();
+
+        // Limpieza del componente
         return () => {
-            es.close();
-        }
+            destroyed = true;
+            es?.close();
+            if (retryTimeout) clearTimeout(retryTimeout);
+        };
     }, [serviceId]);
 
     const [loading, setLoading] = useState(false);

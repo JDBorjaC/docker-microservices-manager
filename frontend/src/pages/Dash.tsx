@@ -41,32 +41,69 @@ export function Dash() {
 
     //ON PAGELOAD: fetch services from backend and subscribe to status updates
     useEffect((): () => void => {
-        fetchServices()
+        // Referencias mutables para poder limpiarlas
+        let es: EventSource | null = null;
+        let retryTimeout: ReturnType<typeof setTimeout> | null = null;
 
-        // Suscribirse a la actualizacion en tiempo real del estado
-        const es = new EventSource(backend_service + "microservices/status/events");
+        // Estado del backoff entre intentos de reconexion
+        let retryDelay = 1000;
+        const MAX_DELAY = 30_000;
 
-        es.addEventListener("status_update", (e: MessageEvent) => {
-            const updatedMs: Service = JSON.parse(e.data);
-            setServices(prev => {
-                const exists = prev.some(s => String(s.id) === String(updatedMs.id));
-                if (exists) {
-                    return prev.map(s => String(s.id) === String(updatedMs.id) ? updatedMs : s);
-                } else {
-                    return [...prev, updatedMs];
-                }
+        // flag que impide reconectar si el componente ya fue desmontado.
+        let destroyed = false;
+
+        const connect = () => {
+            if (destroyed) return;
+
+            es = new EventSource(backend_service + "microservices/status/events");
+
+            // Resetear backoff
+            es.onopen = () => {
+                retryDelay = 1000;
+
+                // Sincronizacion en caso de caida
+                fetchServices();
+            };
+
+            // Actualizar estado del microservicio
+            es.addEventListener("status_update", (e: MessageEvent) => {
+                const updatedMs: Service = JSON.parse(e.data);
+                setServices(prev => {
+                    const exists = prev.some(s => String(s.id) === String(updatedMs.id));
+                    return exists
+                        ? prev.map(s => String(s.id) === String(updatedMs.id) ? updatedMs : s)
+                        : [...prev, updatedMs];
+                });
             });
-        });
 
-        es.onerror = (err) => {
-            console.error("Error en el stream de status:", err, "ReadyState:", es.readyState);
-            // Se intenta reconectar automáticamente.
+            es.onerror = () => {
+                // Cierre explicito para tomar control total de la reconexion
+                es?.close();
+                es = null;
+
+                if (destroyed) return;
+
+                // Jitter del ±20% porque... cosas
+                const jitter = retryDelay * 0.2 * (Math.random() * 2 - 1);
+                const delay = retryDelay + jitter;
+
+                retryTimeout = setTimeout(() => {
+                    // Backoff exponencial: cada fallo duplica el tiempo de espera hasta el tope de 30s.
+                    retryDelay = Math.min(retryDelay * 2, MAX_DELAY);
+                    connect();
+                }, delay);
+            };
         };
 
+        connect();
+
+        // Limpieza del componente
         return () => {
-            es.close();
-        }
-    }, [])
+            destroyed = true;
+            es?.close();
+            if (retryTimeout) clearTimeout(retryTimeout);
+        };
+    }, []);
 
     const toggleService = async (service: Service) => {
         const isRunning = service.status === "running";
