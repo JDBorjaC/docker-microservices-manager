@@ -1,4 +1,4 @@
-**Documentación de Docker Microservices Manager**
+**Docker Microservices Manager**
 -
  Aquí encontrará información sobre los detalles técnicos de todos los módulos que conforman la arquitectura de este proyecto.
  
