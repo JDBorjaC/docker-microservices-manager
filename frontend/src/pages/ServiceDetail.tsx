@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Service, ServiceUpdateForm } from '../models/msm_models'
 import MonitorBackdrop from '../components/monitor';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -43,18 +43,17 @@ export function ServiceDetail() {
                 setEditable(updatedMs);
             }
         });
+        es.onerror = (e) => {
+            console.error("SSE Status Error in ServiceDetail:", e, "ReadyState:", es.readyState);
+        };
 
         return () => {
             es.close();
-            if (esRef.current) {
-                esRef.current.close();
-            }
         }
     }, [serviceId]);
 
     const [loading, setLoading] = useState(false);
     const [logs, setLogs] = useState<string[]>([]);
-    const esRef = useRef<EventSource | null>(null);
 
     const editService = async () => {
         setLoading(true);
@@ -97,46 +96,26 @@ export function ServiceDetail() {
         }
     }
 
-    const toggleLogs = () => {
-        if (esRef.current) {
-            esRef.current.close();
-            esRef.current = null;
-            setLogs(prev => [...prev, "[LOG STREAM DISCONNECTED]"]);
-            return;
-        }
-
-        setLogs([]);
-        const es = new EventSource(backendUrl + "/stream/" + editable.id);
-        esRef.current = es;
-
-        //Se añade un listener por cada tipo de mensaje que se espera del backend
-        es.addEventListener("info", (e: MessageEvent) => {
-            setLogs(prev => [...prev, "[INFO] " + e.data]);
-        });
-        es.addEventListener("log", (e: MessageEvent) => {
-            setLogs(prev => [...prev, e.data]);
-        });
-        es.addEventListener("error", (e: MessageEvent) => {
-            setLogs(prev => [...prev, "[ERROR] " + e.data]);
-        });
-
-        //abortar en caso de done o de error
-        es.addEventListener("done", () => {
-            es.close();
-            esRef.current = null;
-            setLogs(prev => [...prev, "[SESSION TERMINATED]"]);
-        });
-        es.onerror = (e) => {
-            console.error("DEBUG SSE Error Event:", e);
-            if (es.readyState === EventSource.CLOSED) {
-                console.log("SSE Connection closed by server or network.");
-            } else if (es.readyState === EventSource.CONNECTING) {
-                console.log("SSE Attempting to reconnect...");
+    const fetchLogs = async () => {
+        setLoading(true);
+        setLogs(["[FETCHING LOGS...]"]);
+        try {
+            const resp = await fetch(backendUrl + "/logs/" + editable.id);
+            if (!resp.ok) {
+                const errData = await resp.json().catch(() => ({}));
+                setLogs([`[ERROR] ${errData.error || resp.statusText}`]);
+                return;
             }
-            esRef.current = null;
-            setLogs(prev => [...prev, `[SESSION ERROR - ReadyState: ${es.readyState}]`]);
-        };
+            const data = await resp.text();
+            setLogs(data.split('\n'));
+        } catch (error) {
+            console.error("Error fetching logs:", error);
+            setLogs([`[NETWORK ERROR] ${error}`]);
+        } finally {
+            setLoading(false);
+        }
     }
+
 
     const shutService = async () => {
         if (editable.status === "running") {
@@ -202,7 +181,7 @@ export function ServiceDetail() {
                                     <textarea
                                         className="code-block"
                                         name="logs"
-                                        placeholder="Para encender los Logs, unda click en el boton de STATUS, abajo de este recuadro"
+                                        placeholder="Para ver los logs, haga clic en el botón OBTENER LOGS"
                                         value={logs.join("\n")}
                                         disabled={true}
                                     />
@@ -217,8 +196,8 @@ export function ServiceDetail() {
                                         >
                                             {loading ? "..." : (editable.status === "running" ? "STOP" : "START")}
                                         </button>
-                                        <button className='monitor-button' onClick={() => toggleLogs()} disabled={loading}>
-                                            {esRef.current ? "DETENER LOGS" : "VER LOGS"}
+                                        <button className='monitor-button' onClick={() => fetchLogs()} disabled={loading}>
+                                            OBTENER LOGS
                                         </button>
                                         <select
                                             className="drop-down-menu"

@@ -2,5 +2,5 @@
 docs/
 tmp/
 microservices/
-storage/
+storage/*
 !storage/.gitkeep

@@ -48,12 +48,19 @@ export function Dash() {
 
         es.addEventListener("status_update", (e: MessageEvent) => {
             const updatedMs: Service = JSON.parse(e.data);
-            setServices(prev => prev.map(s => s.id === updatedMs.id ? updatedMs : s));
+            setServices(prev => {
+                const exists = prev.some(s => String(s.id) === String(updatedMs.id));
+                if (exists) {
+                    return prev.map(s => String(s.id) === String(updatedMs.id) ? updatedMs : s);
+                } else {
+                    return [...prev, updatedMs];
+                }
+            });
         });
 
-        es.onerror = () => {
-            console.error("Error en el stream de status");
-            es.close();
+        es.onerror = (err) => {
+            console.error("Error en el stream de status:", err, "ReadyState:", es.readyState);
+            // Se intenta reconectar automáticamente.
         };
 
         return () => {

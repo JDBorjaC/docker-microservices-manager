@@ -152,17 +152,19 @@ func (s *Service) CreateMicroservice(ctx context.Context, req CreateMicroservice
 	return ms, nil
 }
 
-func (s *Service) StartAndStreamMicroservice(ctx context.Context, id int, containerId string) (io.ReadCloser, error) {
-
-	//Start Container
-	err := s.client.StartMicroservice(ctx, containerId)
+func (s *Service) GetMicroserviceLogs(ctx context.Context, containerId string) (string, error) {
+	stream, err := s.client.LogMicroservice(ctx, containerId, false)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	//Stream Logs
-	return s.client.LogMicroservice(ctx, containerId, true)
+	defer stream.Close()
 
-	//If the container is successfuly started, leave the status update to the reconciliation loop
+	bytesLog, err := io.ReadAll(stream)
+	if err != nil {
+		return "", fmt.Errorf("could not read log stream: %w", err)
+	}
+
+	return string(bytesLog), nil
 }
 
 func (s *Service) StartMicroservice(ctx context.Context, id int) error {
