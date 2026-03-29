@@ -36,6 +36,7 @@ Este es el servicio más crítico y el "cerebro" central de la operación. Const
 **Responsabilidades y Flujo:**
 + **Manipulación de Docker:** Utiliza el API nativo de Golang para Docker (github.com/docker/docker/client). Cuando recibe código del frontend, genera un Dockerfile en tiempo de ejecución, empaqueta el directorio, y le ordena al Docker Daemon compilar la imagen (BuildImage
 ) para luego crear un contenedor (ContainerCreate).
+  
   **Nota arquitectónica clave:** Crear un contenedor y arrancar un contenedor son **dos operaciones totalmente independientes**. La creación (Create) solo aprovisiona el contenedor en el servidor y lo deja en estado inactivo. Iniciarlo (Start) es lo que pone a correr el código interno.
 + **Inyección de red:** Es el orquestador quien le dice a Docker que agregue las etiquetas mágicas de Traefik (traefik.http.routers...) a los contenedores que crea.
 + **Bucle de Reconciliación (Reconciliation Loop):** Mantiene una goroutine abierta escuchando los eventos nativos del host de Docker en tiempo real. Esto permite sincronizar siempre el estado del servicio con la base de datos interna.
