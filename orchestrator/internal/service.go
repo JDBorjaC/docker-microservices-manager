@@ -322,6 +322,10 @@ func (s *Service) UpdateMicroservice(ctx context.Context, id int, req UpdateMicr
 		return nil, fmt.Errorf("%w: %v", ErrBuildFailed, err)
 	}
 
+	// Set status to updating to decouple lifecycle events
+	s.repo.UpdateMicroservice(id, map[string]any{"status": ContainerUpdating})
+	ms.Status = ContainerUpdating
+
 	// Now it's safe to destroy old container
 	s.client.StopMicroservice(ctx, ms.ContainerId)
 	s.client.RemoveMicroservice(ctx, ms.ContainerId)
@@ -395,6 +399,9 @@ func (s *Service) StartReconciliationLoop(ctx context.Context) {
 			if ms == nil {
 				return
 			}
+			if ms.Status == ContainerUpdating {
+				return
+			}
 
 			state, err := s.client.GetContainerState(ctx, containerID)
 			if err != nil {
@@ -412,6 +419,9 @@ func (s *Service) StartReconciliationLoop(ctx context.Context) {
 		OnContainerDestroy: func(containerID string) {
 			ms, err := s.repo.GetMicroserviceBy("container_id", containerID)
 			if err != nil || ms == nil {
+				return
+			}
+			if ms.Status == ContainerUpdating {
 				return
 			}
 			s.RemoveMicroservice(context.Background(), ms.Id)

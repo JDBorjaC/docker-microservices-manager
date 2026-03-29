@@ -11,6 +11,7 @@ const (
 	ContainerExited     = "exited"
 	ContainerCrashed    = "crashed"
 	ContainerDead       = "dead"
+	ContainerUpdating   = "updating"
 
 	LangFlask   = "flask"
 	LangExpress = "express"
