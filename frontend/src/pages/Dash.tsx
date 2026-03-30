@@ -140,6 +140,8 @@ export function Dash() {
                                     \\ LISTADO DE MICROSERVICIOS
                                 </h1>
 
+                                <p>Interactua con los microservicios, selecciona OPCIONES para ver sus detalles o modifica su estado presionando el primer boton.</p>
+
                                 {/* Cada microservicio muestra NOMBRE, BTN_ON, BTN_EDIT, BTN_DEL */}
                                 <div className='monitor-list'>
 

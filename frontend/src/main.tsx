@@ -5,11 +5,13 @@ import { StrictMode } from 'react'
 import {Dash} from './pages/Dash.tsx'
 import ServiceCreator from './pages/ServiceCreator.tsx'
 import { ServiceDetail } from './pages/ServiceDetail.tsx'
+import { RouteRedirect } from './components/route_redirect.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<RouteRedirect />} />
         <Route path="/admin" element={<Dash />} />
         <Route path="/edit" element={<ServiceCreator/>} />
         <Route path="/deets/:serviceId" element={<ServiceDetail/>}/>
