@@ -129,6 +129,7 @@ export function ServiceDetail() {
                 console.log("Edit success!");
             }
             setLoading(false);
+            fetchDeets();
         }
     }
 
