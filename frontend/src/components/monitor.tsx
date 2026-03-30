@@ -5,7 +5,7 @@ interface MonitorBackdropProps {
     children: React.ReactNode;
 }
 
-export default function MonitorBackdrop({ children }: MonitorBackdropProps) {
+export function MonitorBackdrop({ children }: MonitorBackdropProps) {
   return (
     <div className="wrapper">
       <img src={monitor_url} alt="monitor" className="monitor-img" />
