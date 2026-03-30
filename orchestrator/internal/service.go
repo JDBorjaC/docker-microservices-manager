@@ -245,6 +245,9 @@ func (s *Service) RemoveMicroservice(ctx context.Context, id int) error {
 		return err
 	}
 
+	ms.Status = ContainerRemoved
+	s.broadcastStatus(*ms)
+
 	return nil
 }
 

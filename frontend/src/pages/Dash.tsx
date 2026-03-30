@@ -68,6 +68,12 @@ export function Dash() {
             // Actualizar estado del microservicio
             es.addEventListener("status_update", (e: MessageEvent) => {
                 const updatedMs: Service = JSON.parse(e.data);
+
+                if (updatedMs.status === "removed") {
+                    setServices(prev => prev.filter(s => String(s.id) !== String(updatedMs.id)));
+                    return;
+                }
+
                 setServices(prev => {
                     const exists = prev.some(s => String(s.id) === String(updatedMs.id));
                     return exists

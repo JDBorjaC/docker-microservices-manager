@@ -60,7 +60,12 @@ export function ServiceDetail() {
             es.addEventListener("status_update", (e: MessageEvent) => {
                 const updatedMs: Service = JSON.parse(e.data);
                 if (String(updatedMs.id) === String(serviceId)) {
-                    setEditable(updatedMs);
+                    if (updatedMs.status === "removed") {
+                        alert("Este microservicio ha sido eliminado desde otra sesión o por Docker.");
+                        navi("/admin");
+                    } else {
+                        setEditable(updatedMs);
+                    }
                 }
             });
 
