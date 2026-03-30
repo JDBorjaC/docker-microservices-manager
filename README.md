@@ -2,6 +2,10 @@
 -
 ![Diagram de arquitectura](https://github.com/user-attachments/assets/0836ee72-a853-4c03-91fb-c9219267a419)
 
+**Video Demostrativo**
+
+Link: https://youtu.be/T_qpQLEublc
+
 **Ejemplos Funcionales**
 -
 A continuación se muestran ejemplos funcionales básicos de código para los microservicios, listos para desplegarse:
