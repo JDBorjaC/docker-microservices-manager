@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Service, ServiceUpdateForm } from '../models/msm_models'
-import MonitorBackdrop from '../components/monitor';
 import { useNavigate, useParams } from 'react-router-dom';
+
+import { MonitorBackdrop } from '../components/monitor';
+import { ExpandableMessage } from '../components/acc_message';
+import { BackButton } from '../components/back_btn';
 
 const backendUrl = "http://localhost:8080/microservices";
 
@@ -73,15 +76,14 @@ export function ServiceDetail() {
 
             if (!response.ok) throw new Error(`PUT failed: ${response.statusText}`);
 
-            localStorage.removeItem("editService");
             success = true;
         } catch (error) {
             console.error("Error creando/actualizando servicio:", error);
         } finally {
-            setLoading(false);
-            if (success) {
-                navi("/admin");
+            if(success) {
+                console.log("Edit success!");
             }
+            setLoading(false);
         }
     }
 
@@ -168,11 +170,25 @@ export function ServiceDetail() {
                         <div className='monitor-scanlines'>
                             <div className="monitor-content">
 
-                                <h1> \\ ESTADO DE MICROSERVICIO </h1>
+                                <div className='title-button-div'>
+                                    <h1> \\ ESTADO DE MICROSERVICIO  </h1>
+                                
+                                    <BackButton navi={navi} retTo='/admin/'/>
+                                </div>
 
                                 <p>En esta página se puede confirmar el estado del Microservicio.</p>
-                                <p>Recordatorio: Para que su microservicio funcione, tiene que definir una función 'microservice()', que actuará como la función principal que será ejecutada. </p>
-
+                                <ExpandableMessage title='RECORDATORIO'>
+                                    <p>- Para todos los lenguajes, es necesario colocar el servicio a escuchar en todas las interfaces.</p>
+                                    <p>- Por otro lado, cada lenguaje tiene que exponer un puerto especifico de acuerdo con la configuración por defecto del framework. Puede usar el código a continuación para cada lenguaje:</p>
+                                    <ExpandableMessage title='FLASK'>
+                                        <pre>
+                                            if __name__ == '__main__':<br/>    app.run(host='0.0.0.0', port=5000)
+                                        </pre>
+                                    </ExpandableMessage>
+                                    <ExpandableMessage title='EXPRESS'>
+                                        <pre>{"app.listen(PORT, '0.0.0.0', () => {\n    console.log('Microservicio escuchando correctamente en el puerto ${PORT}');\n});"}</pre>
+                                    </ExpandableMessage>
+                                </ExpandableMessage>
                                 <div className="service-form">
                                     <input
                                         className="code-input"

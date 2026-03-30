@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import type { ServiceCreateForm } from '../models/msm_models'
-import MonitorBackdrop from '../components/monitor';
+import { MonitorBackdrop } from '../components/monitor';
 import { useNavigate } from 'react-router-dom';
+import { ExpandableMessage } from '../components/acc_message';
+import { BackButton } from '../components/back_btn';
 
 const backendUrl = "http://localhost:8080/microservices";
 
@@ -56,11 +58,26 @@ export default function ServiceCreator(){
                     <div className='monitor-scanlines'>
                         <div className="monitor-content">
 
-                            <h1> \\ CREAR MICROSERVICIO </h1>
+                            <div className='title-button-div'>
+                                <h1> \\ CREAR MICROSERVICIO  </h1>
+                                
+                                <BackButton navi={navi} retTo='/admin/'/>
+                            </div>
 
                             <p>Seleccionar lenguaje de programación, editar el código, enviar!!!</p>
                             <p>Recomendación: Pegar el código desde algún Sandbox en linea del lenguaje seleccionado.</p>
-                            <p>Advertencia: Para que su microservicio funcione, tiene que definir una función 'microservice()', que actuará como la función principal que será ejecutada. </p>
+                            <ExpandableMessage title='ADVERTENCIA'>
+                                <p>- Para todos los lenguajes, es necesario colocar el servicio a escuchar en todas las interfaces.</p>
+                                <p>- Por otro lado, cada lenguaje tiene que exponer un puerto especifico de acuerdo con la configuración por defecto del framework. Puede usar el código a continuación para cada lenguaje:</p>
+                                <ExpandableMessage title='FLASK'>
+                                    <pre>
+                                        if __name__ == '__main__':<br/>    app.run(host='0.0.0.0', port=5000)
+                                    </pre>
+                                </ExpandableMessage>
+                                <ExpandableMessage title='EXPRESS'>
+                                    <pre>{"app.listen(PORT, '0.0.0.0', () => {\n    console.log('Microservicio escuchando correctamente en el puerto ${PORT}');\n});"}</pre>
+                                </ExpandableMessage>
+                            </ExpandableMessage>
 
                             <div className="service-form">
                                 <input
@@ -94,10 +111,8 @@ export default function ServiceCreator(){
                                         required
                                         disabled={loading}
                                     >
-                                        <option value="axum">Axum (Rust)</option>
                                         <option value="flask">Flask (Python)</option>
                                         <option value="express">Express (JavaScript)</option>
-                                        <option value="gin">Gin (GO)</option>
                                     </select>
                                 </div>
                             </div>

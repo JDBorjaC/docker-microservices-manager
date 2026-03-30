@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
 import type { Service } from '../models/msm_models';
 import '../styles/monitor.css';
-import MonitorBackdrop from '../components/monitor';
+import { MonitorBackdrop } from '../components/monitor';
 
 const backend_service: string = "http://localhost:8080/"
 
