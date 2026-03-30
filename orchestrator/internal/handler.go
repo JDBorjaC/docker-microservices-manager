@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -110,96 +109,42 @@ func (h *Handler) GetMicroserviceByID(c *gin.Context) {
 	c.JSON(http.StatusOK, ms)
 }
 
-// StreamMicroserviceLogs godoc
-// @Summary Stream logs for a microservice via SSE
-// @Description Starts the container and streams its logs via Server-Sent Events until it completes.
+// GetMicroserviceLogs godoc
+// @Summary Get static logs for a microservice
+// @Description Fetches the recent log output of a microservice container.
 // @Tags microservices
-// @Produce text/event-stream
+// @Produce text/plain
 // @Param id path int true "Microservice Internal ID"
-// @Success 200 {string} string "SSE Stream"
+// @Success 200 {string} string "Container Logs"
 // @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /microservices/stream/{id} [get]
-func (h *Handler) StreamMicroserviceLogs(c *gin.Context) {
-	c.Writer.Header().Set("Content-Type", "text/event-stream")
-	c.Writer.Header().Set("Cache-Control", "no-cache")
-	c.Writer.Header().Set("Connection", "keep-alive")
-	c.Writer.Header().Set("X-Accel-Buffering", "no") // Bypass proxy buffering (Nginx/Traefik)
-
-	flusher, ok := c.Writer.(http.Flusher)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Streaming unsupported"})
-		return
-	}
-
+// @Router /microservices/logs/{id} [get]
+func (h *Handler) GetMicroserviceLogs(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		fmt.Fprintf(c.Writer, "event: error\ndata: id must be an integer\n\n")
-		flusher.Flush()
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id must be an integer"})
 		return
 	}
 
 	containerId, err := h.service.ValidateMicroserviceContainerID(id)
 	if err != nil {
-		fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", err.Error())
-		flusher.Flush()
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
-	fmt.Fprintf(c.Writer, "event: info\ndata: Iniciando contenedor...\n\n")
-	flusher.Flush()
-
-	stream, err := h.service.StartAndStreamMicroservice(c.Request.Context(), id, containerId)
+	logs, err := h.service.GetMicroserviceLogs(c.Request.Context(), containerId)
 	if err != nil {
-		fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", err.Error())
-		flusher.Flush()
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Container not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching logs: " + err.Error()})
 		return
 	}
-	defer stream.Close()
 
-	fmt.Fprintf(c.Writer, "event: info\ndata: Contenedor iniciado, enviando logs...\n\n")
-	flusher.Flush()
-
-	scanner := bufio.NewScanner(stream)
-	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, 1024*1024)
-
-	logChan := make(chan string)
-	errChan := make(chan error)
-
-	go func() {
-		for scanner.Scan() {
-			logChan <- scanner.Text()
-		}
-		errChan <- scanner.Err()
-	}()
-
-	ticker := time.NewTicker(15 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-c.Request.Context().Done():
-			return
-		case <-ticker.C:
-			// Enviar un comentario de keep-alive para evitar que los proxies cierren la conexión
-			fmt.Fprintf(c.Writer, ": keep-alive\n\n")
-			flusher.Flush()
-		case text := <-logChan:
-			fmt.Fprintf(c.Writer, "event: log\ndata: %s\n\n", text)
-			flusher.Flush()
-		case err := <-errChan:
-			if err != nil {
-				fmt.Fprintf(c.Writer, "event: error\ndata: Error leyendo logs: %v\n\n", err)
-			} else {
-				fmt.Fprintf(c.Writer, "event: done\ndata: Stream finalizado.\n\n")
-			}
-			flusher.Flush()
-			return
-		}
-	}
+	c.String(http.StatusOK, logs)
 }
 
 // StopMicroservice godoc
@@ -312,6 +257,7 @@ func (h *Handler) StreamStatusUpdates(c *gin.Context) {
 			fmt.Fprintf(c.Writer, ": keep-alive\n\n")
 			flusher.Flush()
 		case <-clientCtx.Done():
+			fmt.Printf("Status stream for a client disconnected: %v\n", clientCtx.Err())
 			return
 		}
 	}

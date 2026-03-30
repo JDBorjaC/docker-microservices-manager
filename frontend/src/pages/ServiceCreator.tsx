@@ -16,9 +16,11 @@ export default function ServiceCreator(){
     const [language, setLanguage] = useState("flask");
 
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const createService = async () => {
         setLoading(true);
+        setError(null);
 
         var success:boolean = false
 
@@ -34,13 +36,15 @@ export default function ServiceCreator(){
                 body: JSON.stringify(body),
             });
             
-            if (!response.ok) throw new Error(`POST failed: ${response.statusText}`);
+            if (!response.ok){ 
+                throw new Error(`POST failed: ${response.statusText}`) };
             
             localStorage.removeItem("editService");
             success = true
 
         } catch (error) {
             console.error("Error creando servicio:", error);
+            setError("No se pudo crear el microservicio. Intenta de nuevo.");
         } finally {
             setLoading(false);
             if(success){
@@ -67,6 +71,7 @@ export default function ServiceCreator(){
                             <p>Seleccionar lenguaje de programación, editar el código, enviar!!!</p>
                             <p>Recomendación: Pegar el código desde algún Sandbox en linea del lenguaje seleccionado.</p>
                             <ExpandableMessage title='ADVERTENCIA'>
+                                <p>- Para escribir el nombre del microservicio, asegúrese de usar sólo minúsculas, sin caracteres especiales y sin espacio</p>
                                 <p>- Para todos los lenguajes, es necesario colocar el servicio a escuchar en todas las interfaces.</p>
                                 <p>- Por otro lado, cada lenguaje tiene que exponer un puerto especifico de acuerdo con la configuración por defecto del framework. Puede usar el código a continuación para cada lenguaje:</p>
                                 <ExpandableMessage title='FLASK'>
@@ -116,6 +121,11 @@ export default function ServiceCreator(){
                                     </select>
                                 </div>
                             </div>
+
+                            {error && (
+                                <div className="error-message"> ⚠ ERROR: {error}
+                                </div>
+                            )}
 
                         </div>
                     </div>

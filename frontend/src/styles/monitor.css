@@ -254,4 +254,13 @@
   border-radius: 8px;
 }
 
-
+/* Error message styling */
+.error-message {
+  border: 2px solid #0f0;
+  padding: 10px 14px;
+  margin-top: 16px;
+  color: #0f0;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
+  background-color: #090c09;
+}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Service, ServiceUpdateForm } from '../models/msm_models'
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -37,27 +37,72 @@ export function ServiceDetail() {
 
     //ON PAGELOAD: fetch service info and subscribe to status updates
     useEffect((): () => void => {
-        fetchDeets()
+        // Referencias mutables para poder limpiarlas
+        let es: EventSource | null = null;
+        let retryTimeout: ReturnType<typeof setTimeout> | null = null;
 
-        const es = new EventSource("http://localhost:8080/microservices/status/events");
-        es.addEventListener("status_update", (e: MessageEvent) => {
-            const updatedMs: Service = JSON.parse(e.data);
-            if (String(updatedMs.id) === String(serviceId)) {
-                setEditable(updatedMs);
-            }
-        });
+        // Estado del backoff entre intentos de reconexion
+        let retryDelay = 1000;
+        const MAX_DELAY = 30_000;
 
+        // flag que impide reconectar si el componente ya fue desmontado.
+        let destroyed = false;
+
+        const connect = () => {
+            if (destroyed) return;
+
+            es = new EventSource("http://localhost:8080/microservices/status/events");
+
+            // Resetear backoff
+            es.onopen = () => {
+                retryDelay = 1000;
+                fetchDeets();
+            };
+
+            // Actualizar estado del microservicio
+            es.addEventListener("status_update", (e: MessageEvent) => {
+                const updatedMs: Service = JSON.parse(e.data);
+                if (String(updatedMs.id) === String(serviceId)) {
+                    if (updatedMs.status === "removed") {
+                        alert("Este microservicio ha sido eliminado desde otra sesión o por Docker.");
+                        navi("/admin");
+                    } else {
+                        setEditable(updatedMs);
+                    }
+                }
+            });
+
+            es.onerror = () => {
+                // Cierre explicito para tomar control total de la reconexion
+                es?.close();
+                es = null;
+
+                if (destroyed) return;
+
+                // Jitter del ±20% porque... cosas
+                const jitter = retryDelay * 0.2 * (Math.random() * 2 - 1);
+                const delay = retryDelay + jitter;
+
+                retryTimeout = setTimeout(() => {
+                    // Backoff exponencial: cada fallo duplica el tiempo de espera hasta el tope de 30s.
+                    retryDelay = Math.min(retryDelay * 2, MAX_DELAY);
+                    connect();
+                }, delay);
+            };
+        };
+
+        connect();
+
+        // Limpieza del componente
         return () => {
-            es.close();
-            if (esRef.current) {
-                esRef.current.close();
-            }
-        }
+            destroyed = true;
+            es?.close();
+            if (retryTimeout) clearTimeout(retryTimeout);
+        };
     }, [serviceId]);
 
     const [loading, setLoading] = useState(false);
     const [logs, setLogs] = useState<string[]>([]);
-    const esRef = useRef<EventSource | null>(null);
 
     const editService = async () => {
         setLoading(true);
@@ -99,46 +144,26 @@ export function ServiceDetail() {
         }
     }
 
-    const toggleLogs = () => {
-        if (esRef.current) {
-            esRef.current.close();
-            esRef.current = null;
-            setLogs(prev => [...prev, "[LOG STREAM DISCONNECTED]"]);
-            return;
-        }
-
-        setLogs([]);
-        const es = new EventSource(backendUrl + "/stream/" + editable.id);
-        esRef.current = es;
-
-        //Se añade un listener por cada tipo de mensaje que se espera del backend
-        es.addEventListener("info", (e: MessageEvent) => {
-            setLogs(prev => [...prev, "[INFO] " + e.data]);
-        });
-        es.addEventListener("log", (e: MessageEvent) => {
-            setLogs(prev => [...prev, e.data]);
-        });
-        es.addEventListener("error", (e: MessageEvent) => {
-            setLogs(prev => [...prev, "[ERROR] " + e.data]);
-        });
-
-        //abortar en caso de done o de error
-        es.addEventListener("done", () => {
-            es.close();
-            esRef.current = null;
-            setLogs(prev => [...prev, "[SESSION TERMINATED]"]);
-        });
-        es.onerror = (e) => {
-            console.error("DEBUG SSE Error Event:", e);
-            if (es.readyState === EventSource.CLOSED) {
-                console.log("SSE Connection closed by server or network.");
-            } else if (es.readyState === EventSource.CONNECTING) {
-                console.log("SSE Attempting to reconnect...");
+    const fetchLogs = async () => {
+        setLoading(true);
+        setLogs(["[FETCHING LOGS...]"]);
+        try {
+            const resp = await fetch(backendUrl + "/logs/" + editable.id);
+            if (!resp.ok) {
+                const errData = await resp.json().catch(() => ({}));
+                setLogs([`[ERROR] ${errData.error || resp.statusText}`]);
+                return;
             }
-            esRef.current = null;
-            setLogs(prev => [...prev, `[SESSION ERROR - ReadyState: ${es.readyState}]`]);
-        };
+            const data = await resp.text();
+            setLogs(data.split('\n'));
+        } catch (error) {
+            console.error("Error fetching logs:", error);
+            setLogs([`[NETWORK ERROR] ${error}`]);
+        } finally {
+            setLoading(false);
+        }
     }
+
 
     const shutService = async () => {
         if (editable.status === "running") {
@@ -218,7 +243,7 @@ export function ServiceDetail() {
                                     <textarea
                                         className="code-block"
                                         name="logs"
-                                        placeholder="Para encender los Logs, unda click en el boton de STATUS, abajo de este recuadro"
+                                        placeholder="Para ver los logs, haga clic en el botón OBTENER LOGS"
                                         value={logs.join("\n")}
                                         disabled={true}
                                     />
@@ -233,8 +258,8 @@ export function ServiceDetail() {
                                         >
                                             {loading ? "..." : (editable.status === "running" ? "STOP" : "START")}
                                         </button>
-                                        <button className='monitor-button' onClick={() => toggleLogs()} disabled={loading}>
-                                            {esRef.current ? "DETENER LOGS" : "VER LOGS"}
+                                        <button className='monitor-button' onClick={() => fetchLogs()} disabled={loading}>
+                                            OBTENER LOGS
                                         </button>
                                         <select
                                             className="drop-down-menu"

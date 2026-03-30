@@ -152,17 +152,19 @@ func (s *Service) CreateMicroservice(ctx context.Context, req CreateMicroservice
 	return ms, nil
 }
 
-func (s *Service) StartAndStreamMicroservice(ctx context.Context, id int, containerId string) (io.ReadCloser, error) {
-
-	//Start Container
-	err := s.client.StartMicroservice(ctx, containerId)
+func (s *Service) GetMicroserviceLogs(ctx context.Context, containerId string) (string, error) {
+	stream, err := s.client.LogMicroservice(ctx, containerId, false)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	//Stream Logs
-	return s.client.LogMicroservice(ctx, containerId, true)
+	defer stream.Close()
 
-	//If the container is successfuly started, leave the status update to the reconciliation loop
+	bytesLog, err := io.ReadAll(stream)
+	if err != nil {
+		return "", fmt.Errorf("could not read log stream: %w", err)
+	}
+
+	return string(bytesLog), nil
 }
 
 func (s *Service) StartMicroservice(ctx context.Context, id int) error {
@@ -243,6 +245,9 @@ func (s *Service) RemoveMicroservice(ctx context.Context, id int) error {
 		return err
 	}
 
+	ms.Status = ContainerRemoved
+	s.broadcastStatus(*ms)
+
 	return nil
 }
 
@@ -320,6 +325,10 @@ func (s *Service) UpdateMicroservice(ctx context.Context, id int, req UpdateMicr
 		return nil, fmt.Errorf("%w: %v", ErrBuildFailed, err)
 	}
 
+	// Set status to updating to decouple lifecycle events
+	s.repo.UpdateMicroservice(id, map[string]any{"status": ContainerUpdating})
+	ms.Status = ContainerUpdating
+
 	// Now it's safe to destroy old container
 	s.client.StopMicroservice(ctx, ms.ContainerId)
 	s.client.RemoveMicroservice(ctx, ms.ContainerId)
@@ -393,6 +402,9 @@ func (s *Service) StartReconciliationLoop(ctx context.Context) {
 			if ms == nil {
 				return
 			}
+			if ms.Status == ContainerUpdating {
+				return
+			}
 
 			state, err := s.client.GetContainerState(ctx, containerID)
 			if err != nil {
@@ -410,6 +422,9 @@ func (s *Service) StartReconciliationLoop(ctx context.Context) {
 		OnContainerDestroy: func(containerID string) {
 			ms, err := s.repo.GetMicroserviceBy("container_id", containerID)
 			if err != nil || ms == nil {
+				return
+			}
+			if ms.Status == ContainerUpdating {
 				return
 			}
 			s.RemoveMicroservice(context.Background(), ms.Id)
