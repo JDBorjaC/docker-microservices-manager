@@ -200,13 +200,19 @@ func (s *Service) StopMicroservice(ctx context.Context, id int) error {
 		return ErrNotFound
 	}
 
+	// Marcar como exited previniendo el check de OnContainerDie
+	s.repo.UpdateMicroservice(id, map[string]any{"status": ContainerExited})
+
 	err = s.client.StopMicroservice(ctx, ms.ContainerId)
 	if err != nil {
+		s.repo.UpdateMicroservice(id, map[string]any{"status": ms.Status})
 		return err
 	}
 
+	ms.Status = ContainerExited
+	s.broadcastStatus(*ms)
+
 	return nil
-	//Reconciliation Loop handles status update!!!
 }
 
 func (s *Service) ValidateMicroserviceContainerID(id int) (string, error) {
@@ -408,7 +414,7 @@ func (s *Service) StartReconciliationLoop(ctx context.Context) {
 			if ms == nil {
 				return
 			}
-			if ms.Status == ContainerUpdating {
+			if ms.Status == ContainerUpdating || ms.Status == ContainerExited {
 				return
 			}
 
