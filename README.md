@@ -2,6 +2,75 @@
 -
 ![Diagram de arquitectura](https://github.com/user-attachments/assets/0836ee72-a853-4c03-91fb-c9219267a419)
 
+**Ejemplos Funcionales**
+-
+A continuación se muestran ejemplos funcionales básicos de código para los microservicios, listos para desplegarse:
+
+### Flask (Python) - Hola Mundo
+```python
+from flask import Flask, request
+app = Flask(__name__)
+
+@app.route('/', methods=['GET'])
+def hola():
+    return "Hola Mundo"
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+```
+
+### Flask (Python) - Sumar
+```python
+from flask import Flask, request
+app = Flask(__name__)
+
+@app.route('/sumar', methods=['GET'])
+def sumar():
+    a = request.args.get('a', default=0, type=int)
+    b = request.args.get('b', default=0, type=int)
+    
+    resultado = a + b
+    return f"La suma de {a} y {b} es: {resultado}"
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+```
+
+### Express (Node.js) - Hola Mundo
+```javascript
+const express = require('express');
+const app = express();
+const PORT = 3000;
+
+app.get('/', (req, res) => {
+    res.send("Hola Mundo");
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Microservicio escuchando correctamente en el puerto ${PORT}`);
+});
+```
+
+### Express (Node.js) - Sumar
+```javascript
+const express = require('express');
+const app = express();
+const PORT = 3000;
+
+app.get('/sumar', (req, res) => {
+    // Obtener parámetros desde la URL: /sumar?a=10&b=20
+    const a = parseInt(req.query.a) || 0;
+    const b = parseInt(req.query.b) || 0;
+    
+    const resultado = a + b;
+    res.send(`La suma de ${a} y ${b} es: ${resultado}`);
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Microservicio escuchando correctamente en el puerto ${PORT}`);
+});
+```
+
 **Docker Microservices Manager**
 -
 Docker Microservices Manager es una plataforma de orquestación ligera tipo PaaS (Platform as a Service) diseñada para simplificar la creación, el despliegue y la gestión del ciclo de vida de microservicios. A través de una interfaz de usuario, permite a los desarrolladores escribir lógica en múltiples lenguajes de programación y generar contenedores Docker auto-enrutados en tiempo real de manera aislada, sin tener que configurar infraestructuras complejas.
