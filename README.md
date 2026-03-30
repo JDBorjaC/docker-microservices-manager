@@ -124,7 +124,8 @@ Este es el servicio más crítico y el "cerebro" central de la operación. Const
 
 **Contenedores Dinámicos**
  -
- Este no es un módulo estático, sino el resultado de la acción del proyecto. Son los contenedores aislados que cobran vida bajo demanda según el lenguaje elegido por el usuario (Express, Flask, Gin, Axum).
+ Este no es un módulo estático, sino el resultado de la acción del proyecto. Son los contenedores aislados que cobran vida bajo demanda según el lenguaje elegido por el usuario (Express, Flask).
+ 
  **Características:**
  + Totalmente aislados de la infraestructura crítica, pero conectados a la red msm-network para ser visibles por Traefik.
  + Ciclo de vida efímero administrado totalmente por el Orchestrator. Se reconstruyen completamente si el usuario edita el código fuente.
