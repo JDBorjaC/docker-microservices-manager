@@ -14,9 +14,11 @@ export default function ServiceCreator(){
     const [language, setLanguage] = useState("flask");
 
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const createService = async () => {
         setLoading(true);
+        setError(null);
 
         var success:boolean = false
 
@@ -32,13 +34,15 @@ export default function ServiceCreator(){
                 body: JSON.stringify(body),
             });
             
-            if (!response.ok) throw new Error(`POST failed: ${response.statusText}`);
+            if (!response.ok){ 
+                throw new Error(`POST failed: ${response.statusText}`) };
             
             localStorage.removeItem("editService");
             success = true
 
         } catch (error) {
             console.error("Error creando servicio:", error);
+            setError("No se pudo crear el microservicio. Intenta de nuevo.");
         } finally {
             setLoading(false);
             if(success){
@@ -60,7 +64,9 @@ export default function ServiceCreator(){
 
                             <p>Seleccionar lenguaje de programación, editar el código, enviar!!!</p>
                             <p>Recomendación: Pegar el código desde algún Sandbox en linea del lenguaje seleccionado.</p>
-                            <p>Advertencia: Para que su microservicio funcione, tiene que definir una función 'microservice()', que actuará como la función principal que será ejecutada. </p>
+                            <p>Advertencia: Para que su microservicio funcione, tiene que definir una función 'microservice()', que actuará como la función principal que será ejecutada. 
+                                Ademas, el nombre tiene que estar en minusculas, sin espacios ni caracteres especiales, es decir, solo letras, numeros y guiones bajos.
+                            </p>
 
                             <div className="service-form">
                                 <input
@@ -101,6 +107,11 @@ export default function ServiceCreator(){
                                     </select>
                                 </div>
                             </div>
+
+                            {error && (
+                                <div className="error-message"> ⚠ ERROR: {error}
+                                </div>
+                            )}
 
                         </div>
                     </div>
