@@ -70,6 +70,10 @@ func (h *Handler) CreateMicroservice(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /microservices [get]
 func (h *Handler) GetMicroservices(c *gin.Context) {
+	c.Writer.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	c.Writer.Header().Set("Pragma", "no-cache")
+	c.Writer.Header().Set("Expires", "0")
+
 	microservices, err := h.service.GetAllMicroservices()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -90,6 +94,10 @@ func (h *Handler) GetMicroservices(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /microservices/{id} [get]
 func (h *Handler) GetMicroserviceByID(c *gin.Context) {
+	c.Writer.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	c.Writer.Header().Set("Pragma", "no-cache")
+	c.Writer.Header().Set("Expires", "0")
+
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {

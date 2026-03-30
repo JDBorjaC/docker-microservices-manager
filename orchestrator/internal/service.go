@@ -344,6 +344,10 @@ func (s *Service) UpdateMicroservice(ctx context.Context, id int, req UpdateMicr
 
 	// Update repository
 	ms.ContainerId = result.ID
+	ms.Image = customImageName
+	ms.Status = ContainerCreated
+	ms.Code = codeToInject
+
 	updates := map[string]any{
 		"container_id": ms.ContainerId,
 		"image":        ms.Image,
@@ -353,6 +357,8 @@ func (s *Service) UpdateMicroservice(ctx context.Context, id int, req UpdateMicr
 	if err := s.repo.UpdateMicroservice(id, updates); err != nil {
 		return nil, err
 	}
+
+	s.broadcastStatus(*ms)
 
 	return ms, nil
 }
