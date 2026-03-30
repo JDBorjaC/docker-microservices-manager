@@ -1,79 +1,189 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import '../styles/monitor.css'
 
-export default function Dash() {
+import type { Service } from '../models/msm_models';
+import '../styles/monitor.css';
+import { MonitorBackdrop } from '../components/monitor';
+
+const backend_service: string = "http://localhost:8080/"
+
+export function Dash() {
 
     const navi = useNavigate();
 
-    const [services, setServices] = useState([
-        { id: 1, name: 'Service 1', isActive: false },
-        { id: 2, name: 'Service 2', isActive: false },
-        { id: 3, name: 'Service 3', isActive: false }
-    ]);
+    const [services, setServices] = useState<Service[]>([]);
 
-    const toggleService = (id:number) => {
-        setServices(services.map(service => 
-            service.id === id ? { ...service, isActive: !service.isActive } : service
-        ));
+    const editService = async (id: string): Promise<void> => {
+        //la info del service a editar se carga on pageload
+        navi("/deets/" + id);
     };
 
-    const editService = (id:number) => {
-        console.log('Editing ', id)
-        navi('/edit')
+    const deleteService = async (id: string): Promise<void> => {
+        //mandar una petición de Borrar al backend, esperar a que me devuelva la lista de servicios restantes
+        const backResponse = await fetch(backend_service + "microservices/" + id, { method: 'DELETE' });
+
+        if (backResponse.status === 200) {
+            const remainingServices: Service[] = services.filter((s) => s.id !== id);
+            setServices(remainingServices);
+        } else {
+            console.error("No se pudo borrar el microservicio:\n", backResponse.body);
+        }
+
     };
 
-    const deleteService = (id:number) => {
-        setServices(services.filter(service => service.id !== id));
-    };
+    //Hacer un fetch al backend y parsear los contenedores que esten listeados
+    const fetchServices = async (): Promise<void> => {
+        /* TODO: hacer url una variable de entorno maybe */
+        //espero que el backend me mande un arreglo de Service, pero sin el campo de 'code' definido
+        const backResponse = await fetch(backend_service + "microservices");
+        const services: Service[] = await backResponse.json();  // toca estar atento a cambios del modelo
+        setServices(services);
+    }
+
+    //ON PAGELOAD: fetch services from backend and subscribe to status updates
+    useEffect((): () => void => {
+        // Referencias mutables para poder limpiarlas
+        let es: EventSource | null = null;
+        let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+
+        // Estado del backoff entre intentos de reconexion
+        let retryDelay = 1000;
+        const MAX_DELAY = 30_000;
+
+        // flag que impide reconectar si el componente ya fue desmontado.
+        let destroyed = false;
+
+        const connect = () => {
+            if (destroyed) return;
+
+            es = new EventSource(backend_service + "microservices/status/events");
+
+            // Resetear backoff
+            es.onopen = () => {
+                retryDelay = 1000;
+
+                // Sincronizacion en caso de caida
+                fetchServices();
+            };
+
+            // Actualizar estado del microservicio
+            es.addEventListener("status_update", (e: MessageEvent) => {
+                const updatedMs: Service = JSON.parse(e.data);
+
+                if (updatedMs.status === "removed") {
+                    setServices(prev => prev.filter(s => String(s.id) !== String(updatedMs.id)));
+                    return;
+                }
+
+                setServices(prev => {
+                    const exists = prev.some(s => String(s.id) === String(updatedMs.id));
+                    return exists
+                        ? prev.map(s => String(s.id) === String(updatedMs.id) ? updatedMs : s)
+                        : [...prev, updatedMs];
+                });
+            });
+
+            es.onerror = () => {
+                // Cierre explicito para tomar control total de la reconexion
+                es?.close();
+                es = null;
+
+                if (destroyed) return;
+
+                // Jitter del ±20% porque... cosas
+                const jitter = retryDelay * 0.2 * (Math.random() * 2 - 1);
+                const delay = retryDelay + jitter;
+
+                retryTimeout = setTimeout(() => {
+                    // Backoff exponencial: cada fallo duplica el tiempo de espera hasta el tope de 30s.
+                    retryDelay = Math.min(retryDelay * 2, MAX_DELAY);
+                    connect();
+                }, delay);
+            };
+        };
+
+        connect();
+
+        // Limpieza del componente
+        return () => {
+            destroyed = true;
+            es?.close();
+            if (retryTimeout) clearTimeout(retryTimeout);
+        };
+    }, []);
+
+    const toggleService = async (service: Service) => {
+        const isRunning = service.status === "running";
+        const action = isRunning ? "stop" : "start";
+
+        try {
+            await fetch(`${backend_service}microservices/${action}/${service.id}`, {
+                method: "PATCH"
+            });
+            // La UI se actualizará automáticamente vía SSE status_update
+        } catch (err) {
+            console.error(`Error trying to ${action} service:`, err);
+        }
+    }
 
 
     return (
         <div className="dash-div">
-        
-        {/* TERMINAL DE MICROSERVICIOS */}
-        <div className="monitor-frame">
-            <div className="monitor-bezel">
-                <div className="monitor-screen">
-                    <div className='monitor-scanlines'>
-                        <div className="monitor-content">
 
-                            <h1>
-                                LISTADO DE MICROSERVICIOS
-                            </h1>
+            {/* TERMINAL DE MICROSERVICIOS */}
+            <MonitorBackdrop>
+                <div className="monitor-bezel">
+                    <div className="monitor-screen">
+                        <div className='monitor-scanlines'>
+                            <div className="monitor-content">
 
-                            {/* Cada microservicio muestra NOMBRE, BTN_ON, BTN_EDIT, BTN_DEL */}
-                            <div className='monitor-list'>
+                                <h1>
+                                    \\ LISTADO DE MICROSERVICIOS
+                                </h1>
 
-                                {services.map(service => (
-                                    <div key={service.id} className='monitor-item'>
-                                        <div className='service-label'>
-                                            <h3>{service.name}</h3>
-                                            <span>https://www.test.com.co/sumar-microservicio/pyth</span>
+                                <p>Interactua con los microservicios, selecciona OPCIONES para ver sus detalles o modifica su estado presionando el primer boton.</p>
+
+                                {/* Cada microservicio muestra NOMBRE, BTN_ON, BTN_EDIT, BTN_DEL */}
+                                <div className='monitor-list'>
+
+                                    {/* Se itera sobre cada servicio recibido del backend para añadirlo a una lista */}
+                                    {services.map(service => (
+                                        <div key={service.id} className='monitor-item'>
+                                            <div className='service-label'>
+                                                <h3>{service.name}</h3>
+                                                <span>{"http://localhost/services/" + service.name}</span>
+                                            </div>
+                                            <div className='monitor-item-buttons'>
+                                                <button
+                                                    className={`monitor-button status-${service.status}`}
+                                                    onClick={() => toggleService(service)}
+                                                >
+                                                    {service.status.toUpperCase()}
+                                                </button>
+                                                <button className='monitor-button' onClick={() => editService(service.id)}>opciones</button>
+                                                <button className='monitor-button' onClick={() => deleteService(service.id)}>eliminar</button>
+                                            </div>
                                         </div>
-                                        <div className='monitor-item-buttons'>
-                                            <button className='monitor-button' onClick={() => toggleService(service.id)}>{service.isActive ? 'Turn Off' : 'Turn On'}</button>
-                                            <button className='monitor-button' onClick={() => editService(service.id)}>Edit</button>
-                                            <button className='monitor-button' onClick={() => deleteService(service.id)}>Delete</button>
-                                        </div>
+                                    ))}
+
+                                    {/* BTN_CREATE MICROSERVICIO */}
+                                    <div className='create-service-div'>
+                                        <button className='monitor-button' onClick={() => navi("/edit")}>
+                                            CREAR MICROSERVICIO
+                                        </button>
                                     </div>
-                                ))}
-                                {/* BTN_CREATE MICROSERVICIO */}
-                                <div className='create-service-div'>
-                                    <button className='monitor-button' onClick={() => editService(-1337)}>
-                                        CREAR MICROSERVICIO
-                                    </button>
-                                </div>
-                                
-                            </div>
 
+
+                                </div>
+
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
+            </MonitorBackdrop>
+            {/*--- fin de terminal de microservicios ---*/}
 
-        {/*--- COMPONENT END ---*/}
         </div>
     )
 }
+

@@ -1,10 +1,13 @@
-FROM golang:1.26.0
+FROM golang:1.25.6
 
 WORKDIR /usr/src/app
 
+RUN mkdir -p /usr/src/app/storage
+
 RUN go install github.com/air-verse/air@latest
+RUN go install github.com/swaggo/swag/cmd/swag@latest
 
 COPY go.mod go.sum ./
 RUN go mod download
 
-CMD ["air"]
+CMD swag init -g cmd/api/main.go --exclude microservices && air

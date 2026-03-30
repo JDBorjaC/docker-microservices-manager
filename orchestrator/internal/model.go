@@ -1,0 +1,33 @@
+package internal
+
+import "time"
+
+const (
+	ContainerCreated    = "created"
+	ContainerRunning    = "running"
+	ContainerPaused     = "paused"
+	ContainerRestarting = "restarting"
+	ContainerRemoving   = "removing"
+	ContainerExited     = "exited"
+	ContainerCrashed    = "crashed"
+	ContainerDead       = "dead"
+	ContainerUpdating   = "updating"
+	ContainerRemoved    = "removed"
+
+	LangFlask   = "flask"
+	LangExpress = "express"
+	LangGin     = "gin"
+	LangCargo   = "cargo"
+)
+
+type Microservice struct {
+	Id          int       `json:"id" example:"1"`
+	Name        string    `json:"name" example:"api-users"`
+	Description string    `json:"description" example:"Servicio de autenticación"`
+	Language    string    `json:"language" example:"express"`
+	Image       string    `json:"image" example:"msm-api-users:latest"`
+	ContainerId string    `json:"container_id" example:"a1b2c3d4e5f6"`
+	Status      string    `json:"status" example:"running"`
+	Code        string    `json:"code" example:"def hello(): return 'Hello World'"`
+	CreatedAt   time.Time `json:"created_at" example:"2025-01-01T15:04:05Z"`
+}

@@ -1,27 +1,59 @@
 services:
+  traefik:
+    image: traefik:latest
+    container_name: msm-traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    environment:
+      - DOCKER_API_VERSION=1.44
+    ports:
+      - "80:80"
+      - "8090:8080" # Dashboard de Traefik
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - msm-network
+
   frontend_dev:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: MSManager-react-dev
+    container_name: msm-react-dev
     ports:
       - "5173:5173"
     volumes:
-      - ./frontend:/app #B: Sync local code (hot-reload)
+      - ./frontend:/app #Sync local code (hot-reload)
 
-      #B: Isolate node_modules (Important due to OS difference).
-      #B: To add dependencies, use docker-compose exec frontend npm install, or rebuild for every local installation.
-      - /app/node_modules 
+      #Isolate node_modules (Important due to OS difference).
+      #To add dependencies, use docker-compose exec frontend npm install, or rebuild for every local installation.
+      - /app/node_modules
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.frontend.priority=1"
+      - "traefik.http.services.frontend.loadbalancer.server.port=5173"
+    networks:
+      - msm-network
   
   orchestrator_dev:
     build:
       context: ./orchestrator
       dockerfile: Dockerfile.dev
-    container_name: MSManager-orchestrator-dev
+    container_name: msm-orchestrator-dev
     ports:
       - "8080:8080"
     volumes:
-      #B: hot reload
+      #DEV hot reload (and incidentally persist SQLite database)
       - ./orchestrator:/usr/src/app
-      #B: give container access to the host's Docker daemon.
+      
+      #Give container access to the host's Docker daemon.
       - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - msm-network
+
+networks:
+  msm-network:
+    name: msm-network

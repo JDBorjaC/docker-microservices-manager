@@ -1,0 +1,6 @@
+*.db
+docs/
+tmp/
+microservices/
+storage/*
+!storage/.gitkeep
